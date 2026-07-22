@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "clipp'n'k"
+version = "1.0.0"
+id = "artifacts/clippnk-web"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22645
+
+[services.development]
+run = "pnpm --filter @workspace/clippnk-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/clippnk-web", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/clippnk-web/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22645"
+BASE_PATH = "/"

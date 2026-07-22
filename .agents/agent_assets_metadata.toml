@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "1I4NAH-omXtptie6XP63j"
+uri = "file://assets/clippnk-logo-final.png"
+type = "image"
+title = "clipp'n'k logo — 1024×1024"

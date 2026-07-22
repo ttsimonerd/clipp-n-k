@@ -1,0 +1,45 @@
+# ── Stage 1: Install dependencies ────────────────────────────────────────────
+FROM node:24-bookworm-slim AS deps
+
+WORKDIR /workspace
+
+RUN corepack enable && corepack prepare pnpm@10.17.1 --activate
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+COPY tsconfig.base.json tsconfig.json ./
+
+COPY lib/ lib/
+COPY artifacts/api-server/ artifacts/api-server/
+COPY scripts/ scripts/
+
+RUN pnpm config set only-built-dependencies esbuild
+RUN pnpm install --frozen-lockfile
+
+# ── Stage 2: Build the API server bundle ──────────────────────────────────────
+FROM deps AS builder
+
+RUN pnpm run typecheck:libs
+RUN pnpm --filter @workspace/api-server run build
+
+# ── Stage 3: DB migrator (Coolify needs this!) ────────────────────────────────
+FROM deps AS migrator
+
+CMD ["pnpm", "--filter", "@workspace/db", "run", "migrate"]
+
+# ── Stage 4: Production runtime ───────────────────────────────────────────────
+FROM node:24-alpine AS runtime
+
+WORKDIR /workspace
+
+RUN apk add --no-cache ffmpeg
+
+COPY --from=builder /workspace/node_modules ./node_modules
+COPY --from=builder /workspace/artifacts/api-server/node_modules ./artifacts/api-server/node_modules
+COPY --from=builder /workspace/artifacts/api-server/dist ./artifacts/api-server/dist
+
+EXPOSE 3001
+
+ENV NODE_ENV=production
+ENV PORT=3001
+
+CMD ["node", "--enable-source-maps", "./artifacts/api-server/dist/index.mjs"]

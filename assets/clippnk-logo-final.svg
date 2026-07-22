@@ -1,0 +1,17 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Orange rounded square — rounded-3xl at 1024px = rx ~256 -->
+  <rect width="1024" height="1024" rx="256" fill="#E8401A"/>
+
+  <!--
+    Lucide Video icon, viewBox 0 0 24 24, scaled ×21.333 and offset 256
+    so the icon occupies a 512×512 box centered in the 1024×1024 canvas.
+    stroke="white" fill="none" stroke-width=2×21.333≈43
+    stroke-linecap="round" stroke-linejoin="round"
+  -->
+  <g fill="none" stroke="white" stroke-width="43" stroke-linecap="round" stroke-linejoin="round">
+    <!-- rect x="1" y="5" width="15" height="14" rx="2" -->
+    <rect x="277" y="363" width="320" height="299" rx="43"/>
+    <!-- polygon points="23 7 16 12 23 17 23 7" -->
+    <polygon points="747,405 597,512 747,619 747,405"/>
+  </g>
+</svg>

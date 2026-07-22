@@ -1,0 +1,549 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: clipp'n'k API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication and session
+  - name: clips
+    description: Clip upload, management and processing
+  - name: public
+    description: Public share pages
+  - name: admin
+    description: Admin-only site configuration
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get the current logged-in user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log the current user out
+      responses:
+        "204":
+          description: Logged out
+
+  /auth/github/check-star:
+    post:
+      operationId: githubCheckStar
+      tags: [auth]
+      summary: Re-check whether the linked GitHub account has starred the bonus repo
+      responses:
+        "200":
+          description: Star check result (and bonus granted if newly verified)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GithubStarStatus"
+        "400":
+          description: No GitHub account linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/github/disconnect:
+    delete:
+      operationId: githubDisconnect
+      tags: [auth]
+      summary: Unlink the GitHub account from this user (bonus is kept if already granted)
+      responses:
+        "204":
+          description: GitHub account unlinked
+        "401":
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clips:
+    get:
+      operationId: listClips
+      tags: [clips]
+      summary: List the current user's clips
+      responses:
+        "200":
+          description: Clip list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Clip"
+        "401":
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: uploadClip
+      tags: [clips]
+      summary: Upload a new clip (multipart form upload)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ClipUploadInput"
+      responses:
+        "201":
+          description: Clip created and queued for processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clip"
+        "400":
+          description: Invalid file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: File too large or quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clips/{id}:
+    get:
+      operationId: getClip
+      tags: [clips]
+      summary: Get a clip owned by the current user
+      parameters:
+        - $ref: "#/components/parameters/ClipId"
+      responses:
+        "200":
+          description: Clip
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clip"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateClip
+      tags: [clips]
+      summary: Update a clip's title or visibility
+      parameters:
+        - $ref: "#/components/parameters/ClipId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClipUpdate"
+      responses:
+        "200":
+          description: Updated clip
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clip"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteClip
+      tags: [clips]
+      summary: Delete a clip
+      parameters:
+        - $ref: "#/components/parameters/ClipId"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clips/{id}/trim:
+    post:
+      operationId: trimClip
+      tags: [clips]
+      summary: Trim/crop a clip and reprocess it
+      parameters:
+        - $ref: "#/components/parameters/ClipId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClipTrimInput"
+      responses:
+        "202":
+          description: Reprocessing started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clip"
+        "400":
+          description: Invalid trim/crop parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /public/clips/{slug}:
+    get:
+      operationId: getPublicClip
+      tags: [public]
+      summary: Get a public clip by share slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Public clip
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicClip"
+        "404":
+          description: Not found or not public
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/settings:
+    get:
+      operationId: getAdminSettings
+      tags: [admin]
+      summary: Get site settings (admin only)
+      responses:
+        "200":
+          description: Site settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteSettings"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateAdminSettings
+      tags: [admin]
+      summary: Update site settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SiteSettingsUpdate"
+      responses:
+        "200":
+          description: Updated site settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteSettings"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  parameters:
+    ClipId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    Me:
+      type: object
+      required:
+        [
+          id,
+          discordId,
+          username,
+          avatarUrl,
+          isAdmin,
+          usedStorageBytes,
+          quotaStorageBytes,
+          githubUsername,
+          githubStarBonusGranted,
+        ]
+      properties:
+        id: { type: integer }
+        discordId: { type: string }
+        username: { type: string }
+        avatarUrl: { type: ["string", "null"] }
+        isAdmin: { type: boolean }
+        usedStorageBytes: { type: integer }
+        quotaStorageBytes: { type: integer }
+        githubUsername:
+          type: ["string", "null"]
+          description: GitHub login of the linked account, null if not connected.
+        githubStarBonusGranted:
+          type: boolean
+          description: Whether the +1 GB star bonus has already been permanently granted.
+
+    GithubStarStatus:
+      type: object
+      required: [githubUsername, starred, bonusGranted]
+      properties:
+        githubUsername: { type: string }
+        starred: { type: boolean }
+        bonusGranted: { type: boolean }
+
+    ClipVisibility:
+      type: string
+      enum: [public, private]
+
+    ClipStatus:
+      type: string
+      enum: [processing, ready, failed]
+
+    Clip:
+      type: object
+      required:
+        [
+          id,
+          slug,
+          title,
+          originalFilename,
+          mimeType,
+          sizeBytes,
+          durationSeconds,
+          width,
+          height,
+          videoUrl,
+          thumbnailUrl,
+          visibility,
+          status,
+          shareUrl,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: integer }
+        slug: { type: string }
+        title: { type: string }
+        originalFilename: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer }
+        durationSeconds: { type: ["number", "null"] }
+        width: { type: ["integer", "null"] }
+        height: { type: ["integer", "null"] }
+        videoUrl:
+          type: ["string", "null"]
+          description: >-
+            Owner-authenticated playback URL, null while the clip is still
+            processing. Distinct from PublicClip.videoUrl, which is only
+            served for clips with visibility=public.
+        thumbnailUrl: { type: ["string", "null"] }
+        visibility: { $ref: "#/components/schemas/ClipVisibility" }
+        status: { $ref: "#/components/schemas/ClipStatus" }
+        failureReason: { type: ["string", "null"] }
+        shareUrl: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ClipUploadInput:
+      type: object
+      required: [file]
+      description: >-
+        Multipart form upload. The `file` field carries raw video bytes; the
+        frontend performs this upload with a hand-rolled fetch/XHR call (for
+        upload-progress reporting) rather than the generated hook.
+      properties:
+        file:
+          type: string
+        title:
+          type: string
+
+    ClipUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        visibility:
+          $ref: "#/components/schemas/ClipVisibility"
+
+    ClipTrimInput:
+      type: object
+      required: [startSeconds, endSeconds]
+      properties:
+        startSeconds: { type: number, minimum: 0 }
+        endSeconds: { type: number, minimum: 0 }
+        cropX: { type: ["integer", "null"], minimum: 0 }
+        cropY: { type: ["integer", "null"], minimum: 0 }
+        cropWidth: { type: ["integer", "null"], minimum: 1 }
+        cropHeight: { type: ["integer", "null"], minimum: 1 }
+
+    PublicClip:
+      type: object
+      required:
+        [
+          slug,
+          title,
+          videoUrl,
+          thumbnailUrl,
+          width,
+          height,
+          durationSeconds,
+          ownerUsername,
+        ]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        videoUrl: { type: string }
+        thumbnailUrl: { type: ["string", "null"] }
+        width: { type: ["integer", "null"] }
+        height: { type: ["integer", "null"] }
+        durationSeconds: { type: ["number", "null"] }
+        ownerUsername: { type: string }
+
+    SiteSettings:
+      type: object
+      required:
+        [
+          discordGuildId,
+          brandingTitle,
+          brandingLogoUrl,
+          brandingPrimaryColor,
+          maxUploadBytes,
+          maxUserStorageBytes,
+          maxClipDurationSeconds,
+          allowedMimeTypes,
+          defaultVisibility,
+          githubBonusEnabled,
+          discordEnabled,
+          discordBotEnabled,
+        ]
+      properties:
+        discordGuildId: { type: ["string", "null"] }
+        brandingTitle: { type: string }
+        brandingLogoUrl: { type: ["string", "null"] }
+        brandingPrimaryColor: { type: string }
+        maxUploadBytes: { type: integer }
+        maxUserStorageBytes: { type: integer }
+        maxClipDurationSeconds: { type: ["integer", "null"] }
+        allowedMimeTypes:
+          type: array
+          items: { type: string }
+        defaultVisibility: { $ref: "#/components/schemas/ClipVisibility" }
+        githubBonusEnabled:
+          type: boolean
+          description: >-
+            True when GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and GITHUB_REDIRECT_URI
+            are all set in the server environment (i.e. the star-bonus flow is functional).
+        discordEnabled:
+          type: boolean
+          description: >-
+            True when DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI
+            are all set in the server environment (i.e. Discord OAuth login is functional).
+        discordBotEnabled:
+          type: boolean
+          description: >-
+            True when DISCORD_BOT_TOKEN is set in the server environment
+            (i.e. guild membership verification is functional).
+
+    SiteSettingsUpdate:
+      type: object
+      properties:
+        discordGuildId: { type: ["string", "null"] }
+        brandingTitle: { type: string, minLength: 1 }
+        brandingLogoUrl: { type: ["string", "null"] }
+        brandingPrimaryColor: { type: string }
+        maxUploadBytes: { type: integer, minimum: 1 }
+        maxUserStorageBytes: { type: integer, minimum: 1 }
+        maxClipDurationSeconds: { type: ["integer", "null"], minimum: 1 }
+        allowedMimeTypes:
+          type: array
+          items: { type: string }
+        defaultVisibility: { $ref: "#/components/schemas/ClipVisibility" }

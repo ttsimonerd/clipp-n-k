@@ -1,0 +1,195 @@
+Build a production-minded self-hosted SaaS web app called **clipp'n'k**.
+
+## What this app is
+
+A web platform for gamers to upload, trim/crop, store, and share game clips and short videos. It should feel like a polished alternative to catbox.moe, but specifically optimized for sharing clips in Discord and similar chat apps.
+
+## Core product requirements
+
+* Users must log in with **Discord OAuth only**.
+* After login, the app must verify that the user is a member of a **configured Discord server**.
+* Only users in that server can access the app.
+* There must be a personal dashboard for each user.
+* Users can upload clips/videos.
+* Users can trim/crop videos inside the website.
+* Users can generate short shareable URLs for clips.
+* Shared clip pages must look good in Discord previews and open cleanly in browser.
+* The app must be designed to be **easy to self-host**.
+
+## Very important admin requirement
+
+* The Discord server ID used for membership checking must be **changeable from an admin settings page**.
+* The host/admin should not need to edit code to change the guild/server ID.
+* The admin UI should also be able to manage basic settings like:
+
+  * upload limits
+  * allowed file types
+  * branding title/logo/colors
+  * default visibility for uploaded clips
+  * maximum clip duration or file size
+  * whether new uploads are public or private by default
+
+## Deployment requirement
+
+Make the app easy to run on:
+
+* **Coolify**
+* **Vercel**
+* Docker-based deployments
+* other common self-hosting setups
+
+Prefer a portable architecture with:
+
+* environment variables
+* clear setup steps
+* minimal platform-specific assumptions
+* support for containerized deployment
+* a setup that works both locally and in self-hosted environments
+
+## Important repo/workflow rule
+
+* Work only inside the current Replit project/workspace.
+* Do not assume any remote GitHub push flow.
+* Do not rely on manual steps that require me to edit many files if you can generate them directly.
+* If something must be configured manually, tell me exactly what to do and keep it minimal.
+* Do not say the app is finished unless the important files and steps are actually provided.
+
+## Recommended stack
+
+Use a modern, practical stack that fits this project well. Prefer:
+
+* **Next.js** for frontend + backend routes
+* **TypeScript**
+* **PostgreSQL** for data
+* **Prisma** or an equally solid ORM
+* **Tailwind CSS** for UI
+* **FFmpeg** for video processing
+* a clean auth setup compatible with Discord OAuth
+* file storage that can work locally first, then be swapped for S3-compatible storage later
+
+If a better stack choice exists for this exact project, choose the simplest one that is still professional and maintainable.
+
+## Authentication and authorization
+
+* Implement Discord OAuth login securely.
+* After login, fetch the user identity from Discord.
+* Check server membership using Discord data available through the OAuth flow.
+* If the user is not in the configured Discord server, block access.
+* Support an admin user or admin allowlist for site settings.
+* Keep the auth flow simple and secure.
+
+## Backend requirements
+
+* User accounts.
+* Per-user clip ownership.
+* File upload validation.
+* Safe storage for uploaded media.
+* Public share pages for clips.
+* Server-side trimming/cropping processing if needed.
+* Thumbnail generation if feasible.
+* Open Graph metadata generation for Discord previews.
+* Rate limiting or basic abuse prevention.
+* Clean error handling and logging.
+* A structure that can later support folders, tags, search, favorites, privacy controls, analytics, and custom domains.
+
+## Frontend requirements
+
+* A clean dashboard showing uploads.
+* Upload flow with progress and validation feedback.
+* A video editor or trimming interface.
+* A share page preview area.
+* Copy-link/share actions.
+* Good empty states.
+* Good error messages.
+* Responsive design for mobile and desktop.
+* Polished UI that looks like a real SaaS product, not a demo.
+
+## Media handling requirements
+
+* Support common video formats.
+* Validate file type and file size.
+* Preserve quality as much as possible.
+* Use FFmpeg or a similarly reliable tool for clip processing.
+* Generate thumbnails or preview images if practical.
+* Make sure uploaded files are treated as untrusted input.
+* Prevent unsafe filenames and path traversal issues.
+
+## Share page requirements
+
+* Public clip pages must be fast and clean.
+* Include proper Open Graph metadata.
+* Discord preview behavior should be considered from the beginning.
+* The URL should be short, stable, and easy to share.
+* The video player should be prominent and easy to use.
+* Public pages should not expose private data.
+
+## Security and quality rules
+
+* Never hardcode secrets.
+* Use environment variables for sensitive values.
+* Sanitize all user input.
+* Protect routes with proper permission checks.
+* Keep private clips private unless explicitly made public.
+* Write readable, maintainable code.
+* Use comments only when they help.
+* Prefer typed code.
+* Include a basic testing plan or tests for critical flows.
+* Document assumptions clearly.
+
+## What I want you to produce
+
+Work in a professional implementation style. First inspect what already exists in the Replit workspace. Then either extend it or create the app cleanly from scratch.
+
+When responding, include:
+
+1. a short plan
+2. the architecture
+3. the folder structure
+4. the key files created or changed
+5. the code for those files
+6. setup/run instructions
+7. the next recommended steps
+
+If multiple implementation choices exist, choose the simplest strong option and explain briefly why.
+
+## MVP scope
+
+Implement the smallest version that is still useful:
+
+1. Discord login
+2. Discord server membership check
+3. Admin-configurable Discord server ID
+4. User dashboard
+5. Upload clips/videos
+6. Trim/crop clips
+7. Generate shareable URLs
+8. Public clip page with Discord-friendly metadata
+9. Self-host friendly setup
+
+## After MVP
+
+Suggest clean next features like:
+
+* folders and tags
+* search
+* private/public toggles
+* clip expiration
+* custom branding
+* password-protected clips
+* analytics
+* custom domains
+* API access
+* admin improvements
+
+## Final expectation
+
+Build something that feels like a real SaaS:
+
+* clean
+* stable
+* maintainable
+* easy to self-host
+* ready to grow later
+* professional enough to use with friends right away
+
+Start by inspecting the workspace and giving me the implementation plan, then produce the files and code needed to begin the project.

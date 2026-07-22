@@ -1,0 +1,45 @@
+# ── Version control ───────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Node dependencies (rebuilt inside the image) ──────────────────────────────
+node_modules
+**/node_modules
+
+# ── Build outputs (rebuilt inside the image) ──────────────────────────────────
+dist
+**/dist
+tmp
+*.tsbuildinfo
+
+# ── Replit-specific files ─────────────────────────────────────────────────────
+.replit
+replit.nix
+.replitignore
+.cache
+.local
+.config
+.agents
+
+# ── Expo / mobile (not needed for the web+api build) ─────────────────────────
+.expo
+.expo-shared
+
+# ── Editor & OS artifacts ─────────────────────────────────────────────────────
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+*.sublime-workspace
+
+# ── Test / coverage output ────────────────────────────────────────────────────
+coverage
+
+# ── Secrets / local config ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Assets not needed at build time ──────────────────────────────────────────
+attached_assets
+assets

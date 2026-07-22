@@ -1,0 +1,117 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# clipp'n'k — Coolify-native Docker Compose (pre-built images)
+#
+# Use this file if you want to skip the build step and pull pre-built images
+# from GitHub Container Registry instead. Deployment is faster (~30 s vs ~5 min)
+# and requires less RAM on the Coolify host.
+#
+# Deploy in Coolify:
+#   1. New Resource → Docker Compose → point to this repo
+#   2. Set the compose file path to:  docker-compose.coolify.prebuilt.yaml
+#   3. Fill in the REQUIRED env vars in Coolify's Environment Variables tab
+#      (SESSION_SECRET, DISCORD_*, ADMIN_DISCORD_IDS).
+#      Everything else is auto-provisioned by Coolify.
+#   4. Optionally set IMAGE_TAG to pin a specific release (e.g. 1.2.3).
+#      Leave it unset to always pull the latest release.
+#   5. Click Deploy.
+#
+# Key differences from docker-compose.coolify.yaml:
+#   - Uses pre-built GHCR images instead of building from source
+#   - No build toolchain or extra RAM required on the host
+#   - All Coolify-specific behaviour (no port bindings, SERVICE_FQDN_WEB,
+#     SERVICE_PASSWORD_POSTGRES, SERVICE_BASE64_64_SESSION) is identical
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: clippnk
+      POSTGRES_USER: clippnk
+      # Coolify auto-generates a strong password when this magic var is used.
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clippnk -d clippnk"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── DB schema push (one-shot) ────────────────────────────────────────────────
+  migrate:
+    image: ghcr.io/ttsimonerd/clipp-n-k-st/migrator:${IMAGE_TAG:-latest}
+    pull_policy: always
+    environment:
+      DATABASE_URL: postgresql://clippnk:${SERVICE_PASSWORD_POSTGRES}@db:5432/clippnk
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # ── API server ───────────────────────────────────────────────────────────────
+  api:
+    image: ghcr.io/ttsimonerd/clipp-n-k-st/api:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+      DATABASE_URL: postgresql://clippnk:${SERVICE_PASSWORD_POSTGRES}@db:5432/clippnk
+
+      # Sessions — leave SESSION_SECRET blank to use the Coolify-generated value,
+      # or set it explicitly to pin a specific secret across redeployments.
+      SESSION_SECRET: ${SESSION_SECRET:-${SERVICE_BASE64_64_SESSION}}
+
+      # Discord OAuth (REQUIRED) — https://discord.com/developers/applications
+      # Redirect URI to register: https://<your-coolify-domain>/api/auth/discord/callback
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI:-https://${SERVICE_FQDN_WEB}/api/auth/discord/callback}
+
+      # Comma-separated Discord user IDs with admin access (REQUIRED)
+      ADMIN_DISCORD_IDS: ${ADMIN_DISCORD_IDS}
+
+      # Storage — local disk by default; switch to s3 for durable external storage
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_DIR: /app/data/clips
+
+      # S3-compatible storage (only when STORAGE_DRIVER=s3)
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+
+      # GitHub OAuth — optional; enables the +1 GB star-bonus feature
+      # Callback URL: https://<your-coolify-domain>/api/auth/github/callback
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-https://${SERVICE_FQDN_WEB}/api/auth/github/callback}
+
+    volumes:
+      - /srv/storage/clipp/clips:/app/data/clips
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # ── Web frontend + reverse proxy ─────────────────────────────────────────────
+  # No `ports:` here — Coolify's proxy routes traffic to port 80 via SERVICE_FQDN_WEB.
+  web:
+    image: ghcr.io/ttsimonerd/clipp-n-k-st/web:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      # Coolify reads SERVICE_FQDN_WEB and wires its proxy to port 80 of this service.
+      - SERVICE_FQDN_WEB_80
+    depends_on:
+      - api
+
+volumes:
+  db-data:
