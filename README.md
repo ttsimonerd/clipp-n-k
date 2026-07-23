@@ -11,8 +11,6 @@ instance for complete control.
 
 [![Website](https://img.shields.io/badge/Website-clipp--n--k-E8401A?style=for-the-badge)](https://clipp-n-k.duckdns.org)
 [![Discord](https://img.shields.io/discord/1529491880725840083?style=for-the-badge&logo=discord&label=Discord)](https://discord.gg/e3sHxNmGMf)
-[![License](https://img.shields.io/github/license/ttsimonerd/clipp-n-k?style=for-the-badge)](LICENSE)
-:::
 
 ------------------------------------------------------------------------
 
@@ -53,8 +51,6 @@ branding, limits and infrastructure.
 
 # 🚀 Features
 
-  -----------------------------------------------------------------------
-  Feature                       Description
   ----------------------------- -----------------------------------------
   🎥 Upload & Share             Upload clips and share them using simple
                                 links.
