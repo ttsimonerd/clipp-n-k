@@ -2,7 +2,7 @@
 
 > The private clip-sharing hub for your squad — upload, trim, and share game highlights with your Discord server.
 
-[![Deploy to Coolify](https://coolify.io/coolify-badge.svg)](https://app.coolify.io/new?type=compose&repository=https://github.com/ttsimonerd/clipp-n-k-st)
+[!Deploy to Coolify](https://app.coolify.io/new?type=compose&repository=https://github.com/ttsimonerd/clipp-n-k-st)
 
 ---
 
