@@ -1,5 +1,5 @@
-::: {align="center"}
-# clipp'n'k
+
+# Clipp'n'K
 
 ### **Own your clips. Own your platform.**
 
