@@ -25,14 +25,6 @@ branding, limits and infrastructure.
 
 ------------------------------------------------------------------------
 
-# 📸 Preview
-
-> Replace with your banner or screenshot.
-
-``` html
-<img src="assets/banner.svg" width="100%">
-```
-
 ------------------------------------------------------------------------
 
 # ✨ Why clipp'n'k?
@@ -70,44 +62,6 @@ branding, limits and infrastructure.
   🏠 Self-Hosting               Deploy with Docker and configure storage,
                                 branding, upload limits and more.
   -----------------------------------------------------------------------
-
-------------------------------------------------------------------------
-
-# 🌍 Official Hosted vs Self-Hosted
-
-  Official Hosted Instance    Self-Hosted
-  --------------------------- -------------------------------
-  ✅ Ready to use             ✅ Full control
-  ✅ Free                     ✅ Your infrastructure
-  ✅ Uploads up to **1 GB**   ✅ Configurable upload limits
-  ✅ Automatic updates        ✅ Custom branding
-  ✅ No setup                 ✅ Local or S3 storage
-  Great for individuals       Perfect for communities
-
-------------------------------------------------------------------------
-
-# 🎬 Demo
-
-Replace these placeholders when GIFs are available.
-
-``` text
-assets/gifs/upload.gif
-assets/gifs/compress.gif
-assets/gifs/share.gif
-```
-
-------------------------------------------------------------------------
-
-# 📷 Screenshots
-
-``` text
-assets/screenshots/login.png
-assets/screenshots/dashboard.png
-assets/screenshots/upload.png
-assets/screenshots/clip.png
-```
-
-------------------------------------------------------------------------
 
 # 🛣️ Roadmap
 
