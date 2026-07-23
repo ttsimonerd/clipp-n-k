@@ -107,88 +107,6 @@ Security is one of the core goals of clipp'n'k.
 -   FFmpeg
 -   Docker
 -   nginx
-
-------------------------------------------------------------------------
-
-# ❓ FAQ
-
-```{=html}
-<details>
-```
-```{=html}
-<summary>
-```
-`<strong>`{=html}Can I use it for free?`</strong>`{=html}
-```{=html}
-</summary>
-```
-Yes. The Official Hosted Instance is available free of charge.
-
-```{=html}
-</details>
-```
-```{=html}
-<details>
-```
-```{=html}
-<summary>
-```
-`<strong>`{=html}Can I self-host?`</strong>`{=html}
-```{=html}
-</summary>
-```
-Absolutely. That's one of the main goals of the project.
-
-```{=html}
-</details>
-```
-```{=html}
-<details>
-```
-```{=html}
-<summary>
-```
-`<strong>`{=html}Is it only for gaming?`</strong>`{=html}
-```{=html}
-</summary>
-```
-No. Any community can use clipp'n'k.
-
-```{=html}
-</details>
-```
-```{=html}
-<details>
-```
-```{=html}
-<summary>
-```
-`<strong>`{=html}Why Discord authentication?`</strong>`{=html}
-```{=html}
-</summary>
-```
-It makes community management simple while ensuring users belong to your
-Discord server.
-
-```{=html}
-</details>
-```
-```{=html}
-<details>
-```
-```{=html}
-<summary>
-```
-`<strong>`{=html}Can I customize upload limits?`</strong>`{=html}
-```{=html}
-</summary>
-```
-Yes, when self-hosting.
-
-```{=html}
-</details>
-```
-
 ------------------------------------------------------------------------
 
 # 🤝 Community
@@ -209,10 +127,8 @@ Released under the MIT License.
 
 ------------------------------------------------------------------------
 
-::: {align="center"}
 ## Built for communities.
 
 ### Powered by open source.
 
 If you enjoy the project, consider giving it a ⭐.
-:::
