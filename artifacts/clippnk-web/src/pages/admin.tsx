@@ -12,14 +12,24 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { UsersSection } from "@/components/admin/users-section";
+import { RolesSection } from "@/components/admin/roles-section";
 
 const settingsSchema = z.object({
   discordGuildId: z.string().optional().nullable(),
+  discordShareChannelId: z.string().optional().nullable(),
   brandingTitle: z.string().min(1, "Title is required"),
+  brandingLogoUrl: z.string().optional().nullable(),
   brandingPrimaryColor: z.string(),
   maxUploadBytes: z.coerce.number().min(1),
   maxUserStorageBytes: z.coerce.number().min(1),
-  maxClipDurationSeconds: z.coerce.number().optional().nullable(),
+  // Empty input means "no limit" (null). Plain z.coerce.number() turned an
+  // empty string into 0, which failed the min(1) check and made it impossible
+  // for an admin to clear the limit back to unlimited.
+  maxClipDurationSeconds: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
+    z.number().int().min(1).nullable(),
+  ),
   defaultVisibility: z.enum(["public", "private"]),
 });
 
@@ -60,8 +70,10 @@ export default function Admin() {
     resolver: zodResolver(settingsSchema),
     defaultValues: {
       brandingTitle: "",
+      brandingLogoUrl: "",
       brandingPrimaryColor: "",
       discordGuildId: "",
+      discordShareChannelId: "",
       maxUploadBytes: 104857600,
       maxUserStorageBytes: 1073741824,
       maxClipDurationSeconds: null,
@@ -73,8 +85,10 @@ export default function Admin() {
     if (settings) {
       form.reset({
         brandingTitle: settings.brandingTitle,
+        brandingLogoUrl: settings.brandingLogoUrl,
         brandingPrimaryColor: settings.brandingPrimaryColor,
         discordGuildId: settings.discordGuildId,
+        discordShareChannelId: settings.discordShareChannelId,
         maxUploadBytes: settings.maxUploadBytes,
         maxUserStorageBytes: settings.maxUserStorageBytes,
         maxClipDurationSeconds: settings.maxClipDurationSeconds,
@@ -137,6 +151,20 @@ export default function Admin() {
 
                 <FormField
                   control={form.control}
+                  name="discordShareChannelId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-base">Discord Share Channel ID</FormLabel>
+                      <FormControl>
+                        <Input {...field} value={field.value || ""} className="h-12 text-lg font-mono bg-muted/50" placeholder="e.g. 1234567890" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
                   name="defaultVisibility"
                   render={({ field }) => (
                     <FormItem>
@@ -184,6 +212,27 @@ export default function Admin() {
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name="maxClipDurationSeconds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-base">Max Clip Duration (Seconds)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="No limit"
+                          className="h-12 text-lg font-mono bg-muted/50"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
             </CardContent>
           </Card>
@@ -217,6 +266,25 @@ export default function Admin() {
                       <FormLabel className="text-base">Primary Color (Hex or HSL space-separated)</FormLabel>
                       <FormControl>
                         <Input {...field} className="h-12 text-lg font-mono bg-muted/50" placeholder="e.g. 14 100% 55% or #FF4500" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="brandingLogoUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-base">Logo URL (shown in header & share page)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="https://example.com/logo.png"
+                          className="h-12 text-lg font-mono bg-muted/50"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -354,6 +422,10 @@ export default function Admin() {
           </div>
         </CardContent>
       </Card>
+
+      <UsersSection />
+
+      <RolesSection guildId={settings.discordGuildId} botEnabled={settings.discordBotEnabled} />
     </div>
   );
 }

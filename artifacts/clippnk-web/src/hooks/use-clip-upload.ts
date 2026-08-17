@@ -2,77 +2,80 @@ import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getListClipsQueryKey, type Clip } from '@workspace/api-client-react';
 
-interface UploadOptions {
-  file: File;
+interface UploadFileOptions {
   title?: string;
-  onSuccess?: (clip: Clip) => void;
-  onError?: (error: string) => void;
+  onProgress?: (percent: number) => void;
 }
 
+/**
+ * Uploads a single file via XHR (for upload-progress reporting) and resolves
+ * with the created clip. Rejects with a human-readable Error on failure.
+ *
+ * The dialog drives batches by calling this once per file (with a small
+ * concurrency limit); each call is fully independent so one failure never
+ * aborts the others.
+ */
 export function useClipUpload() {
-  const [progress, setProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [activeUploads, setActiveUploads] = useState(0);
   const queryClient = useQueryClient();
 
-  const upload = useCallback(
-    ({ file, title, onSuccess, onError }: UploadOptions) => {
-      setIsUploading(true);
-      setProgress(0);
-      setError(null);
+  const uploadFile = useCallback(
+    ({ file, title, onProgress }: UploadFileOptions & { file: File }): Promise<Clip> =>
+      new Promise<Clip>((resolve, reject) => {
+        setActiveUploads((n) => n + 1);
 
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${import.meta.env.BASE_URL}api/clips`);
-      xhr.withCredentials = true;
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${import.meta.env.BASE_URL}api/clips`);
+        xhr.withCredentials = true;
 
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percentComplete = Math.round((event.loaded / event.total) * 100);
-          setProgress(percentComplete);
-        }
-      };
-
-      xhr.onload = () => {
-        setIsUploading(false);
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const clip: Clip = JSON.parse(xhr.responseText);
-            // Invalidate the clip list to show the new clip
-            queryClient.invalidateQueries({ queryKey: getListClipsQueryKey() });
-            onSuccess?.(clip);
-          } catch (e) {
-            const msg = 'Invalid response from server';
-            setError(msg);
-            onError?.(msg);
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = Math.round((event.loaded / event.total) * 100);
+            onProgress?.(percentComplete);
           }
-        } else {
-          let msg = 'Upload failed';
-          try {
-            const res = JSON.parse(xhr.responseText);
-            if (res.error) msg = res.error;
-          } catch (e) {
-            // ignore
+        };
+
+        xhr.onload = () => {
+          setActiveUploads((n) => Math.max(0, n - 1));
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const clip: Clip = JSON.parse(xhr.responseText);
+              // Invalidate the clip list so the new clip appears immediately
+              queryClient.invalidateQueries({ queryKey: getListClipsQueryKey() });
+              resolve(clip);
+            } catch {
+              reject(new Error('Invalid response from server'));
+            }
+          } else {
+            let msg = 'Upload failed';
+            try {
+              const res = JSON.parse(xhr.responseText);
+              if (res.error) msg = res.error;
+            } catch {
+              // ignore
+            }
+            reject(new Error(msg));
           }
-          setError(msg);
-          onError?.(msg);
-        }
-      };
+        };
 
-      xhr.onerror = () => {
-        setIsUploading(false);
-        const msg = 'Network error during upload';
-        setError(msg);
-        onError?.(msg);
-      };
+        xhr.onerror = () => {
+          setActiveUploads((n) => Math.max(0, n - 1));
+          reject(new Error('Network error during upload'));
+        };
 
-      const formData = new FormData();
-      formData.append('file', file);
-      if (title) formData.append('title', title);
+        xhr.onabort = () => {
+          setActiveUploads((n) => Math.max(0, n - 1));
+          reject(new Error('Upload cancelled'));
+        };
 
-      xhr.send(formData);
-    },
-    [queryClient]
+        const formData = new FormData();
+        formData.append('file', file);
+        if (title) formData.append('title', title);
+
+        xhr.send(formData);
+      }),
+    [queryClient],
   );
 
-  return { upload, progress, isUploading, error };
+  return { uploadFile, isUploading: activeUploads > 0 };
 }

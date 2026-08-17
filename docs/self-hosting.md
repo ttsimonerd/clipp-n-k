@@ -51,6 +51,26 @@ Set `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` to the values from your Disc
 
 > **Tip:** The Admin Settings page (`/admin`) displays the exact redirect URI for your running instance so you can copy-paste it directly into your Discord application.
 
+## Discord Bot (Optional — role sync & "share to Discord")
+
+A bot token enables two optional features:
+
+- **Discord role synchronization** — users' roles are synced on login, and admins can assign per-role upload/storage limits (higher-priority role wins).
+- **"Share to Discord"** — users can post a clip link straight into a configured channel.
+
+To enable them:
+
+1. Create a bot token for the **same** application you use for Discord OAuth (Discord Developer Portal → your app → **Bot** → **Reset Token**).
+2. Invite the bot to your guild.
+3. Set `DISCORD_BOT_TOKEN` to that token.
+4. In the Admin Settings page, set the **Discord Guild ID** (for role sync) and the **Discord Share Channel ID** (for the share button).
+
+| Variable | Description |
+|---|---|
+| `DISCORD_BOT_TOKEN` | Bot token for the same Discord app — enables role sync + "Share to Discord" |
+
+If `DISCORD_BOT_TOKEN` is not set, login still works normally; only role sync and the share button are disabled.
+
 ## Upgrading
 
 clipp'n'k uses migration files (tracked in the `__drizzle_migrations` table) to apply schema changes safely. Each migration runs exactly once, so you can upgrade without fear of data loss or destructive schema syncs.

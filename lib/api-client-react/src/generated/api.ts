@@ -20,15 +20,20 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AdminUser,
+  AdminUserUpdate,
   Clip,
   ClipTrimInput,
   ClipUpdate,
   ClipUploadInput,
+  DiscordGuildRole,
+  DiscordRoleLimit,
   ErrorResponse,
   GithubStarStatus,
   HealthStatus,
   Me,
   PublicClip,
+  PublicSiteSettings,
   SiteSettings,
   SiteSettingsUpdate
 } from './api.schemas';
@@ -284,6 +289,77 @@ export const useLogout = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getLogoutMutationOptions(options));
+    }
+
+export const getSyncRolesUrl = () => {
+
+
+
+
+  return `/api/auth/roles/sync`
+}
+
+/**
+ * @summary Re-sync the current user's Discord roles on demand
+ */
+export const syncRoles = async ( options?: RequestInit): Promise<Me> => {
+
+  return customFetch<Me>(getSyncRolesUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSyncRolesMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncRoles>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncRoles>>, TError,void, TContext> => {
+
+const mutationKey = ['syncRoles'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncRoles>>, void> = () => {
+
+
+          return  syncRoles(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncRolesMutationResult = NonNullable<Awaited<ReturnType<typeof syncRoles>>>
+
+    export type SyncRolesMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Re-sync the current user's Discord roles on demand
+ */
+export const useSyncRoles = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncRoles>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncRoles>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSyncRolesMutationOptions(options));
     }
 
 export const getGithubCheckStarUrl = () => {
@@ -873,6 +949,77 @@ export const useTrimClip = <TError = ErrorType<ErrorResponse>,
       return useMutation(getTrimClipMutationOptions(options));
     }
 
+export const getShareClipToDiscordUrl = (id: number,) => {
+
+
+
+
+  return `/api/clips/${id}/share-discord`
+}
+
+/**
+ * @summary Post a link to a public clip in the configured Discord share channel
+ */
+export const shareClipToDiscord = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getShareClipToDiscordUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getShareClipToDiscordMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof shareClipToDiscord>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof shareClipToDiscord>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['shareClipToDiscord'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof shareClipToDiscord>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  shareClipToDiscord(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ShareClipToDiscordMutationResult = NonNullable<Awaited<ReturnType<typeof shareClipToDiscord>>>
+
+    export type ShareClipToDiscordMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Post a link to a public clip in the configured Discord share channel
+ */
+export const useShareClipToDiscord = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof shareClipToDiscord>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof shareClipToDiscord>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getShareClipToDiscordMutationOptions(options));
+    }
+
 export const getGetPublicClipUrl = (slug: string,) => {
 
 
@@ -938,6 +1085,83 @@ export function useGetPublicClip<TData = Awaited<ReturnType<typeof getPublicClip
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetPublicClipQueryOptions(slug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPublicSettingsUrl = () => {
+
+
+
+
+  return `/api/public/settings`
+}
+
+/**
+ * @summary Get public site branding settings
+ */
+export const getPublicSettings = async ( options?: RequestInit): Promise<PublicSiteSettings> => {
+
+  return customFetch<PublicSiteSettings>(getGetPublicSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicSettingsQueryKey = () => {
+    return [
+    `/api/public/settings`
+    ] as const;
+    }
+
+
+export const getGetPublicSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getPublicSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicSettings>>> = ({ signal }) => getPublicSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicSettings>>>
+export type GetPublicSettingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get public site branding settings
+ */
+
+export function useGetPublicSettings<TData = Awaited<ReturnType<typeof getPublicSettings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicSettingsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -1096,5 +1320,450 @@ export const useUpdateAdminSettings = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getUpdateAdminSettingsMutationOptions(options));
+    }
+
+export const getListAdminUsersUrl = () => {
+
+
+
+
+  return `/api/admin/users`
+}
+
+/**
+ * @summary List all users with usage and status (admin only)
+ */
+export const listAdminUsers = async ( options?: RequestInit): Promise<AdminUser[]> => {
+
+  return customFetch<AdminUser[]>(getListAdminUsersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminUsersQueryKey = () => {
+    return [
+    `/api/admin/users`
+    ] as const;
+    }
+
+
+export const getListAdminUsersQueryOptions = <TData = Awaited<ReturnType<typeof listAdminUsers>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminUsers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminUsersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminUsers>>> = ({ signal }) => listAdminUsers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminUsers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminUsersQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminUsers>>>
+export type ListAdminUsersQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List all users with usage and status (admin only)
+ */
+
+export function useListAdminUsers<TData = Awaited<ReturnType<typeof listAdminUsers>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminUsers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminUsersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateAdminUserUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/users/${id}`
+}
+
+/**
+ * @summary Ban/unban a user or set their storage quota override (admin only)
+ */
+export const updateAdminUser = async (id: number,
+    adminUserUpdate: AdminUserUpdate, options?: RequestInit): Promise<AdminUser> => {
+
+  return customFetch<AdminUser>(getUpdateAdminUserUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(adminUserUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateAdminUserMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminUser>>, TError,{id: number;data: BodyType<AdminUserUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAdminUser>>, TError,{id: number;data: BodyType<AdminUserUpdate>}, TContext> => {
+
+const mutationKey = ['updateAdminUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAdminUser>>, {id: number;data: BodyType<AdminUserUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAdminUser(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAdminUserMutationResult = NonNullable<Awaited<ReturnType<typeof updateAdminUser>>>
+    export type UpdateAdminUserMutationBody = BodyType<AdminUserUpdate>
+    export type UpdateAdminUserMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Ban/unban a user or set their storage quota override (admin only)
+ */
+export const useUpdateAdminUser = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminUser>>, TError,{id: number;data: BodyType<AdminUserUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAdminUser>>,
+        TError,
+        {id: number;data: BodyType<AdminUserUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAdminUserMutationOptions(options));
+    }
+
+export const getDeleteAdminUserUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/users/${id}`
+}
+
+/**
+ * @summary Delete a user and all of their clips (admin only)
+ */
+export const deleteAdminUser = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteAdminUserUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAdminUserMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminUser>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAdminUser>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteAdminUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAdminUser>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAdminUser(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAdminUserMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAdminUser>>>
+
+    export type DeleteAdminUserMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a user and all of their clips (admin only)
+ */
+export const useDeleteAdminUser = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminUser>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAdminUser>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteAdminUserMutationOptions(options));
+    }
+
+export const getListDiscordGuildRolesUrl = () => {
+
+
+
+
+  return `/api/admin/discord/guild-roles`
+}
+
+/**
+ * @summary Fetch the roles of the configured Discord guild (admin only)
+ */
+export const listDiscordGuildRoles = async ( options?: RequestInit): Promise<DiscordGuildRole[]> => {
+
+  return customFetch<DiscordGuildRole[]>(getListDiscordGuildRolesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDiscordGuildRolesQueryKey = () => {
+    return [
+    `/api/admin/discord/guild-roles`
+    ] as const;
+    }
+
+
+export const getListDiscordGuildRolesQueryOptions = <TData = Awaited<ReturnType<typeof listDiscordGuildRoles>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDiscordGuildRoles>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDiscordGuildRolesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDiscordGuildRoles>>> = ({ signal }) => listDiscordGuildRoles({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDiscordGuildRoles>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDiscordGuildRolesQueryResult = NonNullable<Awaited<ReturnType<typeof listDiscordGuildRoles>>>
+export type ListDiscordGuildRolesQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Fetch the roles of the configured Discord guild (admin only)
+ */
+
+export function useListDiscordGuildRoles<TData = Awaited<ReturnType<typeof listDiscordGuildRoles>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDiscordGuildRoles>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDiscordGuildRolesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListDiscordRoleLimitsUrl = () => {
+
+
+
+
+  return `/api/admin/discord/role-limits`
+}
+
+/**
+ * @summary List configured per-role upload/storage limits (admin only)
+ */
+export const listDiscordRoleLimits = async ( options?: RequestInit): Promise<DiscordRoleLimit[]> => {
+
+  return customFetch<DiscordRoleLimit[]>(getListDiscordRoleLimitsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDiscordRoleLimitsQueryKey = () => {
+    return [
+    `/api/admin/discord/role-limits`
+    ] as const;
+    }
+
+
+export const getListDiscordRoleLimitsQueryOptions = <TData = Awaited<ReturnType<typeof listDiscordRoleLimits>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDiscordRoleLimits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDiscordRoleLimitsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDiscordRoleLimits>>> = ({ signal }) => listDiscordRoleLimits({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDiscordRoleLimits>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDiscordRoleLimitsQueryResult = NonNullable<Awaited<ReturnType<typeof listDiscordRoleLimits>>>
+export type ListDiscordRoleLimitsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List configured per-role upload/storage limits (admin only)
+ */
+
+export function useListDiscordRoleLimits<TData = Awaited<ReturnType<typeof listDiscordRoleLimits>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDiscordRoleLimits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDiscordRoleLimitsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateDiscordRoleLimitsUrl = () => {
+
+
+
+
+  return `/api/admin/discord/role-limits`
+}
+
+/**
+ * @summary Replace the per-role upload/storage limit configuration (admin only)
+ */
+export const updateDiscordRoleLimits = async (discordRoleLimit: DiscordRoleLimit[], options?: RequestInit): Promise<DiscordRoleLimit[]> => {
+
+  return customFetch<DiscordRoleLimit[]>(getUpdateDiscordRoleLimitsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(discordRoleLimit)
+  }
+);}
+
+
+
+
+
+export const getUpdateDiscordRoleLimitsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDiscordRoleLimits>>, TError,{data: BodyType<DiscordRoleLimit[]>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateDiscordRoleLimits>>, TError,{data: BodyType<DiscordRoleLimit[]>}, TContext> => {
+
+const mutationKey = ['updateDiscordRoleLimits'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDiscordRoleLimits>>, {data: BodyType<DiscordRoleLimit[]>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateDiscordRoleLimits(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateDiscordRoleLimitsMutationResult = NonNullable<Awaited<ReturnType<typeof updateDiscordRoleLimits>>>
+    export type UpdateDiscordRoleLimitsMutationBody = BodyType<DiscordRoleLimit[]>
+    export type UpdateDiscordRoleLimitsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Replace the per-role upload/storage limit configuration (admin only)
+ */
+export const useUpdateDiscordRoleLimits = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDiscordRoleLimits>>, TError,{data: BodyType<DiscordRoleLimit[]>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateDiscordRoleLimits>>,
+        TError,
+        {data: BodyType<DiscordRoleLimit[]>},
+        TContext
+      > => {
+      return useMutation(getUpdateDiscordRoleLimitsMutationOptions(options));
     }
 

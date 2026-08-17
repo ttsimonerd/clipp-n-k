@@ -1,7 +1,25 @@
-import { Gamepad2, Video } from "lucide-react";
+import { Gamepad2, Video, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+// OAuth failures redirect back to /?authError=... — previously these were
+// silently swallowed and users just saw a plain login screen with no clue
+// what went wrong.
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  oauth_failed: "Sign-in with Discord failed. Please try again.",
+  invalid_state: "Your sign-in session expired. Please try again.",
+  session_error: "Something went wrong while signing you in. Please try again.",
+  guild_check_failed: "We couldn't verify your Discord server membership right now. Please try again in a moment.",
+  not_member: "You must be a member of our Discord server to sign in.",
+};
+
+function useAuthError(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  const key = params.get("authError");
+  return key ? (AUTH_ERROR_MESSAGES[key] ?? "Something went wrong. Please try again.") : null;
+}
+
 export default function Login() {
+  const authError = useAuthError();
   return (
     <div className="min-h-[100dvh] flex flex-col md:flex-row bg-background">
       {/* Left panel - Visual/Brand */}
@@ -48,6 +66,13 @@ export default function Login() {
               Sign in with your Discord account to access the hub.
             </p>
           </div>
+
+          {authError && (
+            <div className="flex items-start gap-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl p-4">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <span>{authError}</span>
+            </div>
+          )}
 
           <div className="pt-4">
             <Button asChild size="lg" className="w-full text-base font-semibold h-14 rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-0.5">

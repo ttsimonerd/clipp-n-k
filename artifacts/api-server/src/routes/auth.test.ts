@@ -48,6 +48,7 @@ vi.mock("@workspace/db", () => {
   return {
     db: { insert: mockInsert, update: mockUpdate, select: mockSelect },
     usersTable: {},
+    discordRolesTable: {},
   };
 });
 
@@ -57,6 +58,7 @@ vi.mock("../lib/discord", () => ({
   fetchDiscordUser: vi.fn(),
   discordAvatarUrl: vi.fn().mockReturnValue(null),
   userIsInGuild: vi.fn().mockResolvedValue(true),
+  fetchMemberRoles: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("../lib/site-settings", () => ({

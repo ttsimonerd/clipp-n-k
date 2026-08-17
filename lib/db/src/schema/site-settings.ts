@@ -6,6 +6,8 @@ import { z } from "zod/v4";
 export const siteSettingsTable = pgTable("site_settings", {
   id: integer("id").primaryKey().default(1),
   discordGuildId: text("discord_guild_id"),
+  // Discord channel ID where "Share to Discord" posts are sent (null = disabled).
+  discordShareChannelId: text("discord_share_channel_id"),
   brandingTitle: text("branding_title").notNull().default("clipp'n'k"),
   brandingLogoUrl: text("branding_logo_url"),
   brandingPrimaryColor: text("branding_primary_color")

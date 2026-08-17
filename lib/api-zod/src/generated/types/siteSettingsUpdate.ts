@@ -10,6 +10,8 @@ import type { ClipVisibility } from './clipVisibility';
 export interface SiteSettingsUpdate {
   /** @nullable */
   discordGuildId?: string | null;
+  /** @nullable */
+  discordShareChannelId?: string | null;
   /** @minLength 1 */
   brandingTitle?: string;
   /** @nullable */

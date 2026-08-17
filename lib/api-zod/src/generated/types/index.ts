@@ -6,16 +6,21 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './adminUser';
+export * from './adminUserUpdate';
 export * from './clip';
 export * from './clipStatus';
 export * from './clipTrimInput';
 export * from './clipUpdate';
 export * from './clipUploadInput';
 export * from './clipVisibility';
+export * from './discordGuildRole';
+export * from './discordRoleLimit';
 export * from './errorResponse';
 export * from './githubStarStatus';
 export * from './healthStatus';
 export * from './me';
 export * from './publicClip';
+export * from './publicSiteSettings';
 export * from './siteSettings';
 export * from './siteSettingsUpdate';

@@ -146,7 +146,7 @@ export function GithubBonusBanner({ me }: Props) {
         <CheckCircle2 className="w-7 h-7 text-green-500 shrink-0" />
         <div>
           <p className="font-semibold text-foreground">+1 GB bonus unlocked! 🎉</p>
-          <p className="text-sm text-muted-foreground">Thanks for starring the repo. Your quota is now 2 GB.</p>
+          <p className="text-sm text-muted-foreground">Thanks for starring the repo. Your storage quota grew by 1 GB permanently.</p>
         </div>
       </div>
     );

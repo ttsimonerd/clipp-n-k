@@ -6,6 +6,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureSessionTable } from "./lib/session";
 import { getSiteSettings } from "./lib/site-settings";
+import { recoverInterruptedProcessing } from "./lib/processing-queue";
 
 const rawPort = process.env["PORT"];
 
@@ -23,6 +24,9 @@ if (Number.isNaN(port) || port <= 0) {
 
 await ensureSessionTable();
 await getSiteSettings(); // seeds the singleton settings row if missing
+// Mark clips stuck in "processing" from a previous run as failed and
+// reconcile storage counters (crash recovery).
+await recoverInterruptedProcessing();
 
 app.listen(port, (err) => {
   if (err) {

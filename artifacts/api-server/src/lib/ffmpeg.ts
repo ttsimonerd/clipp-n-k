@@ -1,5 +1,16 @@
 import ffmpeg from "fluent-ffmpeg";
+import path from "node:path";
 import { logger } from "./logger";
+
+// Bound the time a single ffmpeg job may run so a corrupt or malicious input
+// file (e.g. a huge duration) can't hang a worker forever. fluent-ffmpeg's
+// `timeout` option is expressed in seconds.
+const PROCESS_TIMEOUT_SECONDS = Math.round(
+  Number(process.env.FFMPEG_TIMEOUT_MS ?? 30 * 60 * 1000) / 1000,
+);
+const THUMBNAIL_TIMEOUT_SECONDS = Math.round(
+  Number(process.env.FFMPEG_THUMBNAIL_TIMEOUT_MS ?? 60 * 1000) / 1000,
+);
 
 export interface ProbeResult {
   durationSeconds: number | null;
@@ -42,7 +53,7 @@ export interface ProcessClipOptions {
  */
 export function processClip(options: ProcessClipOptions): Promise<ProbeResult> {
   return new Promise((resolve, reject) => {
-    const command = ffmpeg(options.inputPath);
+    const command = ffmpeg(options.inputPath, { timeout: PROCESS_TIMEOUT_SECONDS });
 
     if (
       options.startSeconds !== undefined &&
@@ -94,13 +105,13 @@ function extractThumbnail(
   thumbnailPath: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    ffmpeg(videoPath)
+    ffmpeg(videoPath, { timeout: THUMBNAIL_TIMEOUT_SECONDS })
       .on("error", (err) => reject(err))
       .on("end", () => resolve())
       .screenshots({
         timestamps: ["1"],
-        filename: require("node:path").basename(thumbnailPath),
-        folder: require("node:path").dirname(thumbnailPath),
+        filename: path.basename(thumbnailPath),
+        folder: path.dirname(thumbnailPath),
         size: "480x?",
       });
   });

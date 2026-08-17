@@ -16,6 +16,7 @@ const { mockSettings, mockCheckDiscordBotToken } = vi.hoisted(() => ({
   mockSettings: {
     id: 1,
     discordGuildId: null,
+    discordShareChannelId: null,
     brandingTitle: "Test Instance",
     brandingLogoUrl: null,
     brandingPrimaryColor: "#5865F2",
@@ -36,6 +37,9 @@ vi.mock("../lib/site-settings", () => ({
 vi.mock("@workspace/db", () => ({
   db: {},
   siteSettingsTable: {},
+  usersTable: {},
+  clipsTable: {},
+  discordRolesTable: {},
 }));
 
 vi.mock("../middlewares/auth", () => ({
@@ -49,6 +53,7 @@ vi.mock("../lib/logger", () => ({
 
 vi.mock("../lib/discord", () => ({
   checkDiscordBotToken: mockCheckDiscordBotToken,
+  fetchGuildRoles: vi.fn(),
 }));
 
 // ── Imports after mocks ───────────────────────────────────────────────────────

@@ -15,6 +15,12 @@ export interface Me {
   isAdmin: boolean;
   usedStorageBytes: number;
   quotaStorageBytes: number;
+  /** Effective per-file upload size limit for this user (role-aware), used by the upload dialog to filter oversized files client-side. */
+  maxUploadBytes: number;
+  /** Discord role IDs this user currently holds in the configured guild. */
+  roles: string[];
+  /** Whether an admin has banned this account. */
+  banned: boolean;
   /**
      * GitHub login of the linked account, null if not connected.
      * @nullable

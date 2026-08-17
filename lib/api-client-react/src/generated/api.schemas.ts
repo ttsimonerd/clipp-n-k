@@ -22,6 +22,12 @@ export interface Me {
   isAdmin: boolean;
   usedStorageBytes: number;
   quotaStorageBytes: number;
+  /** Effective per-file upload size limit for this user (role-aware), used by the upload dialog to filter oversized files client-side. */
+  maxUploadBytes: number;
+  /** Discord role IDs this user currently holds in the configured guild. */
+  roles: string[];
+  /** Whether an admin has banned this account. */
+  banned: boolean;
   /**
      * GitHub login of the linked account, null if not connected.
      * @nullable
@@ -139,9 +145,21 @@ export interface PublicClip {
   ownerUsername: string;
 }
 
+export interface PublicSiteSettings {
+  brandingTitle: string;
+  /** @nullable */
+  brandingLogoUrl: string | null;
+  brandingPrimaryColor: string;
+}
+
 export interface SiteSettings {
   /** @nullable */
   discordGuildId: string | null;
+  /**
+     * Discord channel ID where "Share to Discord" posts are sent, null if disabled.
+     * @nullable
+     */
+  discordShareChannelId: string | null;
   brandingTitle: string;
   /** @nullable */
   brandingLogoUrl: string | null;
@@ -152,26 +170,19 @@ export interface SiteSettings {
   maxClipDurationSeconds: number | null;
   allowedMimeTypes: string[];
   defaultVisibility: ClipVisibility;
-  /**
-   * True when GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and GITHUB_REDIRECT_URI
-   * are all set in the server environment (i.e. the star-bonus flow is functional).
-   */
+  /** True when GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and GITHUB_REDIRECT_URI are all set in the server environment (i.e. the star-bonus flow is functional). */
   githubBonusEnabled: boolean;
-  /**
-   * True when DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI
-   * are all set in the server environment (i.e. Discord OAuth login is functional).
-   */
+  /** True when DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI are all set in the server environment (i.e. Discord OAuth login is functional). */
   discordEnabled: boolean;
-  /**
-   * True when DISCORD_BOT_TOKEN is set in the server environment
-   * (i.e. guild membership verification is functional).
-   */
+  /** True when DISCORD_BOT_TOKEN is set in the server environment (i.e. guild membership verification is functional). */
   discordBotEnabled: boolean;
 }
 
 export interface SiteSettingsUpdate {
   /** @nullable */
   discordGuildId?: string | null;
+  /** @nullable */
+  discordShareChannelId?: string | null;
   /** @minLength 1 */
   brandingTitle?: string;
   /** @nullable */
@@ -188,5 +199,54 @@ export interface SiteSettingsUpdate {
   maxClipDurationSeconds?: number | null;
   allowedMimeTypes?: string[];
   defaultVisibility?: ClipVisibility;
+}
+
+export interface AdminUser {
+  id: number;
+  discordId: string;
+  username: string;
+  /** @nullable */
+  avatarUrl: string | null;
+  usedStorageBytes: number;
+  quotaStorageBytes: number;
+  /**
+     * Admin-set storage quota override, null when role/site defaults apply.
+     * @nullable
+     */
+  quotaOverrideBytes: number | null;
+  roles: string[];
+  banned: boolean;
+  isAdmin: boolean;
+  clipCount: number;
+  createdAt: string;
+}
+
+export interface AdminUserUpdate {
+  banned?: boolean;
+  /** @nullable */
+  quotaOverrideBytes?: number | null;
+}
+
+export interface DiscordGuildRole {
+  id: string;
+  name: string;
+  position: number;
+}
+
+export interface DiscordRoleLimit {
+  roleId: string;
+  roleName: string;
+  /** Higher wins when a user holds multiple configured roles. */
+  priority: number;
+  /**
+     * Per-file upload limit; null inherits the site default.
+     * @nullable
+     */
+  maxUploadBytes: number | null;
+  /**
+     * Storage quota; null inherits the site default.
+     * @nullable
+     */
+  maxUserStorageBytes: number | null;
 }
 

@@ -1,10 +1,12 @@
-import { useGetMe, useLogout } from "@workspace/api-client-react";
+import { useGetMe, useGetPublicSettings, useLogout } from "@workspace/api-client-react";
+import { parseBrandColor } from "@/lib/format";
 import { Link, useLocation } from "wouter";
 import { Loader2, Video, Settings, LogOut, Upload, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Login from "@/pages/login";
 import Blocked from "@/pages/blocked";
+import Banned from "@/pages/banned";
 import { UploadDialog } from "@/components/upload-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useState, useEffect } from "react";
@@ -12,6 +14,8 @@ import { useState, useEffect } from "react";
 export function Shell({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { data: me, isLoading, error } = useGetMe();
+  // Public branding settings (title/logo/color) configured by the admin.
+  const { data: publicSettings } = useGetPublicSettings();
   const logout = useLogout();
   const [uploadOpen, setUploadOpen] = useState(false);
   
@@ -23,6 +27,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
       setIsBlocked(true);
     }
   }, []);
+
+  // Apply admin-configured branding: document title, header title/logo, and
+  // the primary/ring theme colors (injected as HSL CSS variables).
+  useEffect(() => {
+    if (!publicSettings) return;
+    document.title = publicSettings.brandingTitle;
+    const color = parseBrandColor(publicSettings.brandingPrimaryColor);
+    if (color) {
+      document.documentElement.style.setProperty('--primary', color);
+      document.documentElement.style.setProperty('--ring', color);
+    }
+  }, [publicSettings]);
 
   if (isBlocked) {
     return <Blocked />;
@@ -40,15 +56,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return <Login />;
   }
 
+  if (me.banned) {
+    return <Banned />;
+  }
+
   return (
     <div className="min-h-[100dvh] bg-background text-foreground flex flex-col">
       <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-20 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 transition-transform hover:scale-[1.02] active:scale-[0.98]">
             <div className="w-12 h-12 bg-primary text-primary-foreground rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 rotate-3 group-hover:rotate-6 transition-all">
-              <Video className="w-7 h-7" />
+              {publicSettings?.brandingLogoUrl ? (
+                <img src={publicSettings.brandingLogoUrl} alt="" className="w-full h-full object-cover rounded-2xl" />
+              ) : (
+                <Video className="w-7 h-7" />
+              )}
             </div>
-            <span className="font-display font-black text-2xl tracking-tight hidden sm:inline-block text-foreground">clipp'n'k</span>
+            <span className="font-display font-black text-2xl tracking-tight hidden sm:inline-block text-foreground">{publicSettings?.brandingTitle ?? "clipp'n'k"}</span>
           </Link>
 
           <div className="flex items-center gap-3 sm:gap-6">
@@ -103,7 +127,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} maxBytes={me.quotaStorageBytes} />
+      {/* The per-file upload limit (role-aware) — not the storage quota. */}
+      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} maxBytes={me.maxUploadBytes} />
     </div>
   );
 }

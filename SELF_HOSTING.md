@@ -79,6 +79,11 @@ DISCORD_REDIRECT_URI=https://clips.example.com/api/auth/discord/callback
 # Comma-separated Discord user IDs with admin access
 ADMIN_DISCORD_IDS=123456789012345678
 
+# ── Optional — Discord bot (role sync + "share to Discord") ───────────────────
+# A bot token for the SAME Discord app used for OAuth. Invite the bot to your
+# guild to enable role synchronization (per-role limits) and the share button.
+DISCORD_BOT_TOKEN=
+
 # ── Optional — S3-compatible storage ──────────────────────────────────────────
 # Leave blank to store clips on the Coolify volume (local disk, default).
 # Set STORAGE_DRIVER=s3 to use AWS S3, MinIO, Cloudflare R2, etc.
@@ -263,6 +268,7 @@ Caddy obtains and renews Let's Encrypt certs automatically.
 | `DISCORD_CLIENT_SECRET` | ✅ | — | Discord OAuth application client secret |
 | `DISCORD_REDIRECT_URI` | ✅ | — | Full callback URL, e.g. `https://clips.example.com/api/auth/discord/callback` |
 | `ADMIN_DISCORD_IDS` | ✅ | — | Comma-separated Discord user IDs with admin access |
+| `DISCORD_BOT_TOKEN` | | — | Bot token for the same Discord app — enables role sync + "Share to Discord" |
 | `IMAGE_TAG` | | `latest` | Image tag to pull (pre-built path only), e.g. `1.2.3` |
 | `PORT` | | `80` | Host port that nginx binds to |
 | `STORAGE_DRIVER` | | `local` | `local` (container volume) or `s3` |

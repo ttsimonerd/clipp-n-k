@@ -14,8 +14,15 @@ function getEnv(name: string): string {
   return value;
 }
 
+// Keep in sync with the admin page's githubBonusEnabled check: the flow is
+// only functional when the redirect URI is set too. Previously the two
+// disagreed (banner said enabled while the OAuth callback could never work).
 export function isGithubConfigured(): boolean {
-  return Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
+  return Boolean(
+    process.env.GITHUB_CLIENT_ID &&
+      process.env.GITHUB_CLIENT_SECRET &&
+      process.env.GITHUB_REDIRECT_URI,
+  );
 }
 
 export function getGithubAuthorizeUrl(state: string): string {

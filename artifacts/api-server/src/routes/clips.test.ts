@@ -7,17 +7,21 @@
  *
  * Covers:
  *   POST /clips  — MIME-type rejection, per-file size rejection,
- *                  user quota rejection, successful upload + DB insert,
- *                  async pipeline marks clip ready + updates storage accounting
- *                  (via SUM query, not incremental arithmetic),
- *                  async pipeline marks clip failed when processClip throws,
+ *                  user quota rejection (including the new used+size check),
+ *                  duration-limit rejection, successful upload + DB insert,
+ *                  async pipeline marks clip ready + adjusts storage
+ *                  accounting by the compressed delta,
+ *                  async pipeline marks clip failed when processClip throws
+ *                  (and releases the reserved bytes),
  *                  partial storage writes cleaned up when thumbnail upload fails,
  *                  storage left untouched when processClip fails before any upload
  *   POST /clips/:id/trim — 202 immediately, endSeconds validation,
- *                          trim marks clip ready + updates storage accounting
- *                          (via SUM query),
- *                          trim marks clip failed when processClip throws,
- *                          partial storage writes cleaned up on trim failure
+ *                          duration validation, 409 when a job is in flight,
+ *                          trim writes NEW keys + swaps + cleans up old keys,
+ *                          trim restores the old clip (not failed) on failure,
+ *                          partial NEW storage writes cleaned up on trim failure
+ *   DELETE /clips/:id — releases the clip's bytes (ready or processing),
+ *                       no-op for failed clips
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -40,6 +44,7 @@ const {
   mockSelectWhere,
   mockDeleteWhere,
   mockProcessClip,
+  mockProbeVideo,
   mockStoragePutFile,
   mockStorageGetLocalPath,
   mockStorageDeleteFile,
@@ -50,6 +55,7 @@ const {
   mockSelectWhere: vi.fn(),
   mockDeleteWhere: vi.fn().mockResolvedValue([]),
   mockProcessClip: vi.fn(),
+  mockProbeVideo: vi.fn(),
   mockStoragePutFile: vi.fn().mockResolvedValue(undefined),
   mockStorageGetLocalPath: vi.fn(),
   mockStorageDeleteFile: vi.fn().mockResolvedValue(undefined),
@@ -76,7 +82,7 @@ vi.mock("@workspace/db", () => {
       return {
         where: (..._args: unknown[]) => {
           const p = Promise.resolve([] as unknown[]);
-          // Attach .returning() so the trim route can call .where().returning()
+          // Attach .returning() so routes can call .where().returning()
           return Object.assign(p, {
             returning: () => {
               mockUpdateReturning();
@@ -99,6 +105,7 @@ vi.mock("@workspace/db", () => {
     db: { insert: mockInsert, update: mockUpdate, select: mockSelect, delete: mockDelete },
     clipsTable: {},
     usersTable: {},
+    discordRolesTable: {},
   };
 });
 
@@ -111,13 +118,12 @@ vi.mock("../lib/storage", () => ({
     putFile: mockStoragePutFile,
     getLocalPath: mockStorageGetLocalPath,
     deleteFile: mockStorageDeleteFile,
-    getPublicUrl: vi.fn((key: string) => `/static/${key}`),
   })),
 }));
 
 vi.mock("../lib/ffmpeg", () => ({
   processClip: mockProcessClip,
-  probeVideo: vi.fn().mockResolvedValue({ durationSeconds: 4, width: 320, height: 240 }),
+  probeVideo: mockProbeVideo,
 }));
 
 vi.mock("../middlewares/auth", () => ({
@@ -136,7 +142,9 @@ vi.mock("nanoid", () => ({
 
 import { getSiteSettings } from "../lib/site-settings";
 import { db, type User } from "@workspace/db";
+import { probeVideo } from "../lib/ffmpeg";
 import clipsRouter from "./clips";
+import { resetProcessingQueueForTests } from "../lib/processing-queue";
 
 // ── Constants & helpers ───────────────────────────────────────────────────────
 
@@ -212,12 +220,48 @@ async function flushAsync(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 100));
 }
 
+/** Every .set({…}) argument recorded across all db.update calls. */
+function allSetArgs(): Array<Record<string, unknown>> {
+  return mockUpdateSet.mock.calls.map((c) => c[0]) as Array<Record<string, unknown>>;
+}
+
+/** The most recent .set({…}) that touched usedStorageBytes, if any. */
+function latestStorageSet(): Record<string, unknown> | undefined {
+  return [...allSetArgs()].reverse().find((a) => "usedStorageBytes" in a);
+}
+
+/**
+ * Flatten a drizzle `sql` expression (0.45 shape: nested queryChunks / value
+ * arrays) into leaf values — literal SQL strings and number params.
+ */
+function sqlLeaves(value: unknown): unknown[] {
+  const v = value as { queryChunks?: unknown[]; value?: unknown[] };
+  if (Array.isArray(v?.queryChunks)) {
+    return v.queryChunks.flatMap((c) => sqlLeaves(c));
+  }
+  if (Array.isArray(v?.value)) {
+    return v.value.flatMap((c) => sqlLeaves(c));
+  }
+  return [value];
+}
+
+/** The SQL text of a drizzle `sql` expression used as a column value. */
+function sqlText(value: unknown): string {
+  return sqlLeaves(value).map(String).join("");
+}
+
+/** Numeric parameters embedded in a drizzle `sql` expression. */
+function sqlParams(value: unknown): unknown[] {
+  return sqlLeaves(value).filter((c) => typeof c === "number");
+}
+
 // ── Test setup ────────────────────────────────────────────────────────────────
 
 let tmpDir: string;
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  resetProcessingQueueForTests();
 
   // Create a per-test temp dir so processClip can write real output files
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clippnk-clips-test-"));
@@ -229,10 +273,13 @@ beforeEach(async () => {
 
   // Default DB responses
   mockInsertReturning.mockResolvedValue([INSERTED_CLIP]);
-  // currentUsedBytes inner select: user with 0 used storage by default
-  mockSelectWhere.mockResolvedValue([{ usedStorageBytes: 0 }]);
+  // Generic select fallback: an existing clip/row for existence checks etc.
+  mockSelectWhere.mockResolvedValue([INSERTED_CLIP]);
   // trim route: mockUpdateReturning returns the "processing" clip
   mockUpdateReturning.mockReturnValue([{ ...INSERTED_CLIP, status: "processing" }]);
+
+  // probeVideo default (only consulted when maxClipDurationSeconds is set)
+  mockProbeVideo.mockResolvedValue({ durationSeconds: 4, width: 320, height: 240 });
 
   // processClip mock: creates real (empty) output files so downstream fs.stat() succeeds
   mockProcessClip.mockImplementation(
@@ -313,7 +360,6 @@ describe("POST /clips — per-file size validation", () => {
 
 describe("POST /clips — user storage quota validation", () => {
   it("returns 413 when the user has already consumed their entire quota", async () => {
-    // User has used exactly their quota (5 GB) → upload denied
     const quotaExhaustedUser = { ...DEFAULT_USER, usedStorageBytes: 5 * ONE_GB };
     vi.mocked(getSiteSettings).mockResolvedValue({
       ...DEFAULT_SETTINGS,
@@ -370,6 +416,57 @@ describe("POST /clips — user storage quota validation", () => {
     // Effective quota = 5 GB + 1 GB star bonus = 6 GB; 5.5 GB used < 6 GB → allowed
     expect(res.status).toBe(201);
   });
+
+  it("rejects when used + incoming file size would exceed the quota (over-commit guard)", async () => {
+    // 4.5 MB used of a 5 MB quota — the user has room, but a 1 MB file would
+    // push them over. The old check (used >= quota) wrongly allowed this.
+    const almostFullUser = { ...DEFAULT_USER, usedStorageBytes: 4.5 * ONE_MB };
+    vi.mocked(getSiteSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      maxUploadBytes: 10 * ONE_MB,
+      maxUserStorageBytes: 5 * ONE_MB,
+    } as Awaited<ReturnType<typeof getSiteSettings>>);
+
+    const res = await request(buildApp(almostFullUser))
+      .post("/api/clips")
+      .attach("file", Buffer.alloc(ONE_MB), { filename: "clip.mp4", contentType: "video/mp4" });
+
+    expect(res.status).toBe(413);
+    expect(res.body.error).toMatch(/quota/i);
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /clips — duration limit validation", () => {
+  it("returns 400 when the clip exceeds maxClipDurationSeconds", async () => {
+    vi.mocked(getSiteSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      maxClipDurationSeconds: 10,
+    } as Awaited<ReturnType<typeof getSiteSettings>>);
+    vi.mocked(probeVideo).mockResolvedValue({ durationSeconds: 25, width: 1920, height: 1080 });
+
+    const res = await request(buildApp())
+      .post("/api/clips")
+      .attach("file", Buffer.alloc(ONE_MB), { filename: "long.mp4", contentType: "video/mp4" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/maximum allowed is 10s/i);
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it("accepts a clip within maxClipDurationSeconds", async () => {
+    vi.mocked(getSiteSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      maxClipDurationSeconds: 10,
+    } as Awaited<ReturnType<typeof getSiteSettings>>);
+    vi.mocked(probeVideo).mockResolvedValue({ durationSeconds: 5, width: 1920, height: 1080 });
+
+    const res = await request(buildApp())
+      .post("/api/clips")
+      .attach("file", Buffer.alloc(ONE_MB), { filename: "ok.mp4", contentType: "video/mp4" });
+
+    expect(res.status).toBe(201);
+  });
 });
 
 // ── POST /clips — successful upload ──────────────────────────────────────────
@@ -408,13 +505,27 @@ describe("POST /clips — successful upload", () => {
       status: "processing",
     });
   });
+
+  it("reserves the original byte count against the user's quota at insert time", async () => {
+    await request(buildApp())
+      .post("/api/clips")
+      .attach("file", Buffer.alloc(ONE_MB), {
+        filename: "myclip.mp4",
+        contentType: "video/mp4",
+      });
+
+    const reservation = latestStorageSet();
+    expect(reservation).toBeDefined();
+    // Atomic increment: used_storage_bytes + <file size> (the column ref is
+    // "undefined" here only because usersTable is mocked as an empty object)
+    expect(sqlParams(reservation!.usedStorageBytes)).toContain(ONE_MB);
+  });
 });
 
 // ── POST /clips — async processing pipeline ───────────────────────────────────
 //
-// `runProcessing` is fire-and-forget (`void runProcessing(...)`), so we call
-// flushAsync() after the supertest request to let the pipeline settle before
-// checking mock call records.
+// `runProcessing` is fire-and-forget (queued), so we call flushAsync() after
+// the supertest request to let the pipeline settle before checking mocks.
 
 describe("POST /clips — async processing pipeline (runProcessing)", () => {
   it("invokes processClip and then marks the clip as 'ready' in the DB", async () => {
@@ -426,12 +537,7 @@ describe("POST /clips — async processing pipeline (runProcessing)", () => {
 
     expect(mockProcessClip).toHaveBeenCalledOnce();
 
-    // At least one db.update().set() call should carry status:'ready'
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<
-      Record<string, unknown>
-    >;
-    const readyUpdate = allSetArgs.find((a) => a?.status === "ready");
-
+    const readyUpdate = allSetArgs().find((a) => a?.status === "ready");
     expect(readyUpdate).toBeDefined();
     expect(readyUpdate).toMatchObject({
       status: "ready",
@@ -439,6 +545,19 @@ describe("POST /clips — async processing pipeline (runProcessing)", () => {
       width: 320,
       height: 240,
     });
+  });
+
+  it("stores the re-encoded file with a corrected video/mp4 MIME type", async () => {
+    await request(buildApp())
+      .post("/api/clips")
+      .attach("file", Buffer.alloc(ONE_MB), { filename: "clip.webm", contentType: "video/webm" });
+
+    await flushAsync();
+
+    const readyUpdate = allSetArgs().find((a) => a?.status === "ready");
+    // Everything is re-encoded to H.264 MP4, so the stored MIME type must be
+    // corrected to video/mp4 (previously a webm upload kept its wrong type).
+    expect(readyUpdate).toMatchObject({ mimeType: "video/mp4" });
   });
 
   it("puts both the video file and the thumbnail into storage after processing", async () => {
@@ -455,13 +574,9 @@ describe("POST /clips — async processing pipeline (runProcessing)", () => {
     expect(storedKeys).toContain(INSERTED_CLIP.thumbnailKey);
   });
 
-  it("updates the user's usedStorageBytes using the SUM of all ready clips", async () => {
-    // processClip mock writes a 512 KB file. After the clip is marked ready,
-    // sumReadyClipBytes queries the DB; the mock returns that SUM value.
+  it("replaces the reserved bytes with the compressed size (delta accounting)", async () => {
     const COMPRESSED_SIZE = 512 * 1024;
-
-    // sumReadyClipBytes select returns a SUM aggregate row
-    mockSelectWhere.mockResolvedValue([{ total: String(COMPRESSED_SIZE) }]);
+    const DELTA = COMPRESSED_SIZE - ONE_MB; // negative: file shrank
 
     await request(buildApp())
       .post("/api/clips")
@@ -469,18 +584,13 @@ describe("POST /clips — async processing pipeline (runProcessing)", () => {
 
     await flushAsync();
 
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<
-      Record<string, unknown>
-    >;
-    const storageUpdate = allSetArgs.find((a) => "usedStorageBytes" in a);
-
+    const storageUpdate = latestStorageSet();
     expect(storageUpdate).toBeDefined();
-    // usedStorageBytes is set to the SUM returned by the DB, not computed by
-    // adding the file size to a stale counter.
-    expect(storageUpdate!.usedStorageBytes).toBe(COMPRESSED_SIZE);
+    // used_storage_bytes = used_storage_bytes + (compressed - original)
+    expect(sqlParams(storageUpdate!.usedStorageBytes)).toContain(DELTA);
   });
 
-  it("marks the clip as 'failed' when processClip throws", async () => {
+  it("marks the clip as 'failed' and releases the reserved bytes when processClip throws", async () => {
     mockProcessClip.mockRejectedValue(new Error("ffmpeg: codec not found"));
 
     await request(buildApp())
@@ -489,17 +599,15 @@ describe("POST /clips — async processing pipeline (runProcessing)", () => {
 
     await flushAsync();
 
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<
-      Record<string, unknown>
-    >;
-    const failedUpdate = allSetArgs.find((a) => a?.status === "failed");
-
+    const failedUpdate = allSetArgs().find((a) => a?.status === "failed");
     expect(failedUpdate).toBeDefined();
-    expect(failedUpdate!.failureReason).toMatch(/processing failed/i);
+    expect(failedUpdate!.failureReason).toMatch(/ffmpeg: codec not found/i);
 
-    // Storage bytes must NOT have been updated on failure
-    const storageUpdate = allSetArgs.find((a) => "usedStorageBytes" in a);
-    expect(storageUpdate).toBeUndefined();
+    // The reservation must be released so a failed upload doesn't eat quota.
+    const release = latestStorageSet();
+    expect(release).toBeDefined();
+    expect(sqlText(release!.usedStorageBytes)).toContain("GREATEST");
+    expect(sqlParams(release!.usedStorageBytes)).toContain(ONE_MB);
   });
 
   it("cleans up both storage keys when the thumbnail upload fails after the video upload succeeds", async () => {
@@ -515,22 +623,16 @@ describe("POST /clips — async processing pipeline (runProcessing)", () => {
     await flushAsync();
 
     // Clip must be marked failed
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<Record<string, unknown>>;
-    const failedUpdate = allSetArgs.find((a) => a?.status === "failed");
+    const failedUpdate = allSetArgs().find((a) => a?.status === "failed");
     expect(failedUpdate).toBeDefined();
 
     // Both storage keys must be deleted to prevent orphaned files
     const deletedKeys = mockStorageDeleteFile.mock.calls.map((c) => c[0]);
     expect(deletedKeys).toContain(INSERTED_CLIP.storageKey);
     expect(deletedKeys).toContain(INSERTED_CLIP.thumbnailKey);
-
-    // usedStorageBytes must NOT be updated
-    const storageUpdate = allSetArgs.find((a) => "usedStorageBytes" in a);
-    expect(storageUpdate).toBeUndefined();
   });
 
   it("does NOT touch storage when processClip fails before any upload", async () => {
-    // processClip throws before putFile is ever called
     mockProcessClip.mockRejectedValue(new Error("ffmpeg: codec not found"));
 
     await request(buildApp())
@@ -559,14 +661,11 @@ describe("POST /clips/:id/trim — async trim pipeline (runTrim)", () => {
 
   beforeEach(() => {
     // First select: loadOwnedClip → existing clip
-    // Subsequent selects: sumReadyClipBytes → SUM aggregate row (512 KB, the
-    // compressed output size written by the processClip mock)
-    mockSelectWhere
-      .mockResolvedValueOnce([STORED_CLIP])
-      .mockResolvedValue([{ total: String(512 * 1024) }]);
+    // Subsequent selects: existence checks → the same clip
+    mockSelectWhere.mockResolvedValue([STORED_CLIP]);
 
-    // .where().returning() used to send the 202 response
-    mockUpdateReturning.mockReturnValue([{ ...STORED_CLIP, status: "processing", failureReason: null }]);
+    // .where().returning() used to send the 202 response and to swap pointers
+    mockUpdateReturning.mockReturnValue([{ ...STORED_CLIP, status: "processing" }]);
   });
 
   it("returns 202 immediately with status=processing", async () => {
@@ -587,6 +686,58 @@ describe("POST /clips/:id/trim — async trim pipeline (runTrim)", () => {
     expect(res.body.error).toMatch(/endSeconds must be greater/i);
   });
 
+  it("returns 400 when the clip is not ready to trim", async () => {
+    mockSelectWhere.mockResolvedValue([{ ...STORED_CLIP, status: "processing" }]);
+
+    const res = await request(buildApp())
+      .post("/api/clips/1/trim")
+      .send({ startSeconds: 1, endSeconds: 3 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/not ready to trim/i);
+  });
+
+  it("returns 400 when endSeconds exceeds the clip's duration", async () => {
+    const res = await request(buildApp())
+      .post("/api/clips/1/trim")
+      .send({ startSeconds: 1, endSeconds: 99 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/exceeds the clip's duration/i);
+  });
+
+  it("returns 400 when the trimmed length exceeds maxClipDurationSeconds", async () => {
+    // A 100s clip trimmed to a 50s window against a 10s limit.
+    mockSelectWhere.mockResolvedValue([{ ...STORED_CLIP, durationSeconds: 100 }]);
+    vi.mocked(getSiteSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      maxClipDurationSeconds: 10,
+    } as Awaited<ReturnType<typeof getSiteSettings>>);
+
+    const res = await request(buildApp())
+      .post("/api/clips/1/trim")
+      .send({ startSeconds: 0, endSeconds: 50 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/maximum allowed duration/i);
+  });
+
+  it("returns 409 when the clip already has a processing job in flight", async () => {
+    // First trim: processClip never resolves, so the per-clip job stays in flight.
+    mockProcessClip.mockImplementation(() => new Promise(() => {}));
+
+    const first = await request(buildApp())
+      .post("/api/clips/1/trim")
+      .send({ startSeconds: 1, endSeconds: 3 });
+    expect(first.status).toBe(202);
+
+    const second = await request(buildApp())
+      .post("/api/clips/1/trim")
+      .send({ startSeconds: 1, endSeconds: 2 });
+    expect(second.status).toBe(409);
+    expect(second.body.error).toMatch(/already being processed/i);
+  });
+
   it("marks the clip as 'ready' after a successful trim", async () => {
     await request(buildApp())
       .post("/api/clips/1/trim")
@@ -594,20 +745,42 @@ describe("POST /clips/:id/trim — async trim pipeline (runTrim)", () => {
 
     await flushAsync();
 
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<
-      Record<string, unknown>
-    >;
-    const readyUpdate = allSetArgs.find((a) => a?.status === "ready");
-
+    const readyUpdate = allSetArgs().find((a) => a?.status === "ready");
     expect(readyUpdate).toBeDefined();
     expect(readyUpdate).toMatchObject({ status: "ready", durationSeconds: 2.5 });
   });
 
-  it("updates usedStorageBytes using the SUM of all ready clips after trim", async () => {
-    // processClip mock writes a 512 KB file. After the clip is marked ready
-    // with the new size, sumReadyClipBytes queries the DB; the mock (set in
-    // beforeEach) returns 512 KB as the aggregate total.
+  it("writes trimmed output to NEW keys, swaps the pointers, then cleans up the old keys", async () => {
+    await request(buildApp())
+      .post("/api/clips/1/trim")
+      .send({ startSeconds: 1, endSeconds: 3 });
+
+    await flushAsync();
+
+    // putFile must target fresh keys (nanoid mock appends "-test-slug-01"),
+    // never overwriting the original files in place.
+    const storedKeys = mockStoragePutFile.mock.calls.map((c) => c[0]);
+    expect(storedKeys).toContain("clips/test-slug-01-test-slug-01.mp4");
+    expect(storedKeys).toContain("clips/test-slug-01-test-slug-01-thumb.jpg");
+    expect(storedKeys).not.toContain(STORED_CLIP.storageKey);
+    expect(storedKeys).not.toContain(STORED_CLIP.thumbnailKey);
+
+    // The swap update must point the clip at the new keys.
+    const readyUpdate = allSetArgs().find((a) => a?.status === "ready");
+    expect(readyUpdate).toMatchObject({
+      storageKey: "clips/test-slug-01-test-slug-01.mp4",
+      thumbnailKey: "clips/test-slug-01-test-slug-01-thumb.jpg",
+    });
+
+    // Old files are cleaned up only after the swap succeeded.
+    const deletedKeys = mockStorageDeleteFile.mock.calls.map((c) => c[0]);
+    expect(deletedKeys).toContain(STORED_CLIP.storageKey);
+    expect(deletedKeys).toContain(STORED_CLIP.thumbnailKey);
+  });
+
+  it("adjusts usedStorageBytes by the compressed delta after a successful trim", async () => {
     const COMPRESSED_SIZE = 512 * 1024;
+    const DELTA = COMPRESSED_SIZE - ONE_MB;
 
     await request(buildApp())
       .post("/api/clips/1/trim")
@@ -615,19 +788,18 @@ describe("POST /clips/:id/trim — async trim pipeline (runTrim)", () => {
 
     await flushAsync();
 
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<
-      Record<string, unknown>
-    >;
-    const storageUpdate = allSetArgs.find((a) => "usedStorageBytes" in a);
-
+    const storageUpdate = latestStorageSet();
     expect(storageUpdate).toBeDefined();
-    // usedStorageBytes is set to the SUM returned by the DB (512 KB),
-    // not computed via the old incremental "current + delta" arithmetic.
-    expect(storageUpdate!.usedStorageBytes).toBe(COMPRESSED_SIZE);
+    expect(sqlParams(storageUpdate!.usedStorageBytes)).toContain(DELTA);
   });
 
-  it("marks the clip as 'failed' when processClip throws during trim", async () => {
+  it("restores the original clip (not 'failed') when processClip throws during trim", async () => {
     mockProcessClip.mockRejectedValue(new Error("ffmpeg crop out of bounds"));
+    // First select: loadOwnedClip → ready clip. Later selects (existence check
+    // + restore) see the clip as still "processing" mid-job.
+    mockSelectWhere
+      .mockResolvedValueOnce([STORED_CLIP])
+      .mockResolvedValue([{ ...STORED_CLIP, status: "processing" }]);
 
     await request(buildApp())
       .post("/api/clips/1/trim")
@@ -635,23 +807,16 @@ describe("POST /clips/:id/trim — async trim pipeline (runTrim)", () => {
 
     await flushAsync();
 
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<
-      Record<string, unknown>
-    >;
-    const failedUpdate = allSetArgs.find((a) => a?.status === "failed");
-
-    expect(failedUpdate).toBeDefined();
-    expect(failedUpdate!.failureReason).toMatch(/trim|crop/i);
-
-    // Storage bytes must NOT be adjusted on failure
-    const storageUpdate = allSetArgs.find((a) => "usedStorageBytes" in a);
-    expect(storageUpdate).toBeUndefined();
+    // The clip must be restored to ready with a recorded reason — the original
+    // files are untouched, so it's still playable. It must NOT be marked failed.
+    const restore = allSetArgs().find((a) => a?.status === "ready" && a?.failureReason);
+    expect(restore).toBeDefined();
+    expect(String(restore!.failureReason)).toMatch(/ffmpeg crop out of bounds/i);
+    expect(allSetArgs().some((a) => a?.status === "failed")).toBe(false);
   });
 
-  it("cleans up both storage keys when the thumbnail upload fails after the video upload succeeds during trim", async () => {
-    // First putFile (trimmed video) succeeds; second (thumbnail) fails.
-    // The original stored video has already been overwritten, so both keys
-    // must be removed to prevent a corrupted file from being served later.
+  it("cleans up the NEW keys (not the originals) when the thumbnail upload fails during trim", async () => {
+    // First putFile (new video) succeeds; second (new thumbnail) fails.
     mockStoragePutFile
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error("storage write error"));
@@ -662,21 +827,15 @@ describe("POST /clips/:id/trim — async trim pipeline (runTrim)", () => {
 
     await flushAsync();
 
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<Record<string, unknown>>;
-    const failedUpdate = allSetArgs.find((a) => a?.status === "failed");
-    expect(failedUpdate).toBeDefined();
-
+    // Only the partially-written NEW files are removed; the originals survive.
     const deletedKeys = mockStorageDeleteFile.mock.calls.map((c) => c[0]);
-    expect(deletedKeys).toContain(INSERTED_CLIP.storageKey);
-    expect(deletedKeys).toContain(INSERTED_CLIP.thumbnailKey);
-
-    const storageUpdate = allSetArgs.find((a) => "usedStorageBytes" in a);
-    expect(storageUpdate).toBeUndefined();
+    expect(deletedKeys).not.toContain(STORED_CLIP.storageKey);
+    expect(deletedKeys).not.toContain(STORED_CLIP.thumbnailKey);
+    expect(deletedKeys).toContain("clips/test-slug-01-test-slug-01.mp4");
+    expect(deletedKeys).toContain("clips/test-slug-01-test-slug-01-thumb.jpg");
   });
 
   it("does NOT touch storage when processClip fails before any upload during trim", async () => {
-    // processClip throws before putFile is ever called — the original stored
-    // files are intact and must NOT be deleted.
     mockProcessClip.mockRejectedValue(new Error("ffmpeg crop out of bounds"));
 
     await request(buildApp())
@@ -685,6 +844,8 @@ describe("POST /clips/:id/trim — async trim pipeline (runTrim)", () => {
 
     await flushAsync();
 
+    // No new files were written, so nothing to clean up — and the originals
+    // must never be deleted.
     expect(mockStorageDeleteFile).not.toHaveBeenCalled();
   });
 });
@@ -719,11 +880,7 @@ describe("DELETE /clips/:id — successful delete of a ready clip", () => {
   };
 
   beforeEach(() => {
-    // First select: loadOwnedClip → the ready clip
-    // Second select: currentUsedBytes → user currently has 2 MB used
-    mockSelectWhere
-      .mockResolvedValueOnce([READY_CLIP])
-      .mockResolvedValue([{ usedStorageBytes: 2 * ONE_MB }]);
+    mockSelectWhere.mockResolvedValue([READY_CLIP]);
   });
 
   it("returns 204 No Content", async () => {
@@ -740,39 +897,22 @@ describe("DELETE /clips/:id — successful delete of a ready clip", () => {
     expect(deletedKeys).toContain(READY_CLIP.thumbnailKey);
   });
 
-  it("decrements usedStorageBytes by the clip's sizeBytes", async () => {
+  it("releases the clip's bytes with an atomic, floored decrement", async () => {
     await request(buildApp()).delete("/api/clips/1");
 
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<
-      Record<string, unknown>
-    >;
-    const storageUpdate = allSetArgs.find((a) => "usedStorageBytes" in a);
-
+    const storageUpdate = latestStorageSet();
     expect(storageUpdate).toBeDefined();
-    // 2 MB (current) − 1 MB (clip size) = 1 MB remaining
-    expect(storageUpdate!.usedStorageBytes).toBe(ONE_MB);
-  });
-
-  it("never lets usedStorageBytes go below zero", async () => {
-    // currentUsedBytes returns 0 even though the clip claims 1 MB — drift guard
-    mockSelectWhere
-      .mockResolvedValueOnce([READY_CLIP])
-      .mockResolvedValue([{ usedStorageBytes: 0 }]);
-
-    await request(buildApp()).delete("/api/clips/1");
-
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<
-      Record<string, unknown>
-    >;
-    const storageUpdate = allSetArgs.find((a) => "usedStorageBytes" in a);
-
-    expect(storageUpdate).toBeDefined();
-    expect(storageUpdate!.usedStorageBytes).toBe(0);
+    // used_storage_bytes = GREATEST(used_storage_bytes - <size>, 0)
+    expect(sqlText(storageUpdate!.usedStorageBytes)).toContain("GREATEST");
+    expect(sqlParams(storageUpdate!.usedStorageBytes)).toContain(ONE_MB);
   });
 });
 
-describe("DELETE /clips/:id — non-ready clip (processing / failed)", () => {
-  it("does NOT decrement usedStorageBytes when deleting a processing clip", async () => {
+describe("DELETE /clips/:id — processing clip", () => {
+  it("releases the reserved bytes when deleting a processing clip", async () => {
+    // A processing clip holds a reservation of its original size; deleting it
+    // must release those bytes (the in-flight pipeline is then a no-op because
+    // the row is gone).
     const PROCESSING_CLIP = { ...INSERTED_CLIP, status: "processing", sizeBytes: ONE_MB };
     mockSelectWhere.mockResolvedValue([PROCESSING_CLIP]);
 
@@ -780,18 +920,20 @@ describe("DELETE /clips/:id — non-ready clip (processing / failed)", () => {
 
     expect(res.status).toBe(204);
 
-    // Storage files are still cleaned up
+    // Storage files are still cleaned up (best-effort; may not exist yet)
     expect(mockStorageDeleteFile).toHaveBeenCalled();
 
-    // But usedStorageBytes must NOT be touched — the size was never committed
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<
-      Record<string, unknown>
-    >;
-    const storageUpdate = allSetArgs.find((a) => "usedStorageBytes" in a);
-    expect(storageUpdate).toBeUndefined();
+    const storageUpdate = latestStorageSet();
+    expect(storageUpdate).toBeDefined();
+    expect(sqlText(storageUpdate!.usedStorageBytes)).toContain("GREATEST");
+    expect(sqlParams(storageUpdate!.usedStorageBytes)).toContain(ONE_MB);
   });
+});
 
-  it("does NOT decrement usedStorageBytes when deleting a failed clip", async () => {
+describe("DELETE /clips/:id — failed clip", () => {
+  it("does NOT adjust usedStorageBytes when deleting a failed clip", async () => {
+    // Failed clips hold no reservation (released when they failed), so there
+    // is nothing to release here.
     const FAILED_CLIP = {
       ...INSERTED_CLIP,
       status: "failed",
@@ -804,10 +946,7 @@ describe("DELETE /clips/:id — non-ready clip (processing / failed)", () => {
 
     expect(res.status).toBe(204);
 
-    const allSetArgs = mockUpdateSet.mock.calls.map((c) => c[0]) as Array<
-      Record<string, unknown>
-    >;
-    const storageUpdate = allSetArgs.find((a) => "usedStorageBytes" in a);
+    const storageUpdate = allSetArgs().find((a) => "usedStorageBytes" in a);
     expect(storageUpdate).toBeUndefined();
   });
 });

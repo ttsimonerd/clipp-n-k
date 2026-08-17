@@ -9,8 +9,14 @@
  * Most tests exercise checkDiscordBotTokenUncached to bypass the in-memory
  * cache and keep tests independent of each other.
  */
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { checkDiscordBotToken, checkDiscordBotTokenUncached } from "./discord";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import {
+  checkDiscordBotToken,
+  checkDiscordBotTokenUncached,
+  fetchMemberRoles,
+  fetchGuildRoles,
+  postChannelMessage,
+} from "./discord";
 
 // Silence pino logger output during tests
 vi.mock("./logger", () => ({
@@ -135,6 +141,152 @@ describe("checkDiscordBotTokenUncached", () => {
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe("fetchMemberRoles", () => {
+  beforeEach(() => {
+    delete process.env.DISCORD_BOT_TOKEN;
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    delete process.env.DISCORD_BOT_TOKEN;
+  });
+
+  it("returns [] when no bot token is configured", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const roles = await fetchMemberRoles("guild-1", "user-1");
+
+    expect(roles).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the member's role IDs on success", async () => {
+    process.env.DISCORD_BOT_TOKEN = "bot-token";
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({ roles: ["role-a", "role-b"] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const roles = await fetchMemberRoles("guild-1", "user-1");
+
+    expect(roles).toEqual(["role-a", "role-b"]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://discord.com/api/v10/guilds/guild-1/members/user-1",
+      expect.objectContaining({
+        headers: { Authorization: "Bot bot-token" },
+      }),
+    );
+  });
+
+  it("throws when Discord rejects the request", async () => {
+    process.env.DISCORD_BOT_TOKEN = "bot-token";
+    const fetchMock = vi.fn().mockResolvedValue({ status: 404, ok: false });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchMemberRoles("guild-1", "user-1")).rejects.toThrow(
+      /Failed to fetch Discord member roles/,
+    );
+  });
+});
+
+describe("fetchGuildRoles", () => {
+  beforeEach(() => {
+    delete process.env.DISCORD_BOT_TOKEN;
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    delete process.env.DISCORD_BOT_TOKEN;
+  });
+
+  it("throws when no bot token is configured", async () => {
+    await expect(fetchGuildRoles("guild-1")).rejects.toThrow(
+      /DISCORD_BOT_TOKEN must be set/,
+    );
+  });
+
+  it("returns guild roles on success", async () => {
+    process.env.DISCORD_BOT_TOKEN = "bot-token";
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => [
+        { id: "1", name: "@everyone", position: 0 },
+        { id: "2", name: "VIP", position: 5 },
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const roles = await fetchGuildRoles("guild-1");
+
+    expect(roles).toHaveLength(2);
+    expect(roles[1]).toMatchObject({ id: "2", name: "VIP" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://discord.com/api/v10/guilds/guild-1/roles",
+      expect.objectContaining({ headers: { Authorization: "Bot bot-token" } }),
+    );
+  });
+
+  it("throws a clear message when the guild is not found", async () => {
+    process.env.DISCORD_BOT_TOKEN = "bot-token";
+    const fetchMock = vi.fn().mockResolvedValue({ status: 404, ok: false });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchGuildRoles("missing")).rejects.toThrow(/Guild not found/);
+  });
+});
+
+describe("postChannelMessage", () => {
+  beforeEach(() => {
+    delete process.env.DISCORD_BOT_TOKEN;
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    delete process.env.DISCORD_BOT_TOKEN;
+  });
+
+  it("throws when no bot token is configured", async () => {
+    await expect(postChannelMessage("chan-1", "hello")).rejects.toThrow(
+      /DISCORD_BOT_TOKEN must be set/,
+    );
+  });
+
+  it("posts the content to the channel as the bot", async () => {
+    process.env.DISCORD_BOT_TOKEN = "bot-token";
+    const fetchMock = vi.fn().mockResolvedValue({ status: 200, ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await postChannelMessage("chan-1", "**clip**\nhttps://example.com/c/abc");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://discord.com/api/v10/channels/chan-1/messages",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bot bot-token" }),
+        body: JSON.stringify({ content: "**clip**\nhttps://example.com/c/abc" }),
+      }),
+    );
+  });
+
+  it("throws a clear message when the bot lacks permission (403)", async () => {
+    process.env.DISCORD_BOT_TOKEN = "bot-token";
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 403,
+      ok: false,
+      text: async () => "missing permissions",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(postChannelMessage("chan-1", "hello")).rejects.toThrow(
+      /lacks permission/,
+    );
   });
 });
 

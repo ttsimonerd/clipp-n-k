@@ -10,6 +10,11 @@ import type { ClipVisibility } from './clipVisibility';
 export interface SiteSettings {
   /** @nullable */
   discordGuildId: string | null;
+  /**
+     * Discord channel ID where "Share to Discord" posts are sent, null if disabled.
+     * @nullable
+     */
+  discordShareChannelId: string | null;
   brandingTitle: string;
   /** @nullable */
   brandingLogoUrl: string | null;
@@ -20,19 +25,10 @@ export interface SiteSettings {
   maxClipDurationSeconds: number | null;
   allowedMimeTypes: string[];
   defaultVisibility: ClipVisibility;
-  /**
-   * True when GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and GITHUB_REDIRECT_URI
-   * are all set in the server environment (i.e. the star-bonus flow is functional).
-   */
+  /** True when GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and GITHUB_REDIRECT_URI are all set in the server environment (i.e. the star-bonus flow is functional). */
   githubBonusEnabled: boolean;
-  /**
-   * True when DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI
-   * are all set in the server environment (i.e. Discord OAuth login is functional).
-   */
+  /** True when DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI are all set in the server environment (i.e. Discord OAuth login is functional). */
   discordEnabled: boolean;
-  /**
-   * True when DISCORD_BOT_TOKEN is set in the server environment
-   * (i.e. guild membership verification is functional).
-   */
+  /** True when DISCORD_BOT_TOKEN is set in the server environment (i.e. guild membership verification is functional). */
   discordBotEnabled: boolean;
 }

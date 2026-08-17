@@ -9,11 +9,14 @@
 ## Features
 
 - **Discord-only login** — access is gated to members of your Discord server
+- **Batch upload** — upload multiple clips at once with per-file progress and retry
 - **Upload & process clips** — trim, crop, and compress game footage automatically
 - **Public / private clips** — toggle per clip; public clips get a shareable `/c/:slug` link with Discord embed support
+- **Discord role sync** — sync roles on login and enforce per-role upload/storage limits
+- **Share to Discord** — post clip links straight into a Discord channel
 - **Storage options** — local disk (zero config) or any S3-compatible bucket (AWS, MinIO, Cloudflare R2)
 - **GitHub star bonus** — users can link GitHub and earn +1 GB storage for starring the repo
-- **Admin panel** — configure branding, upload limits, storage quota, and allowed file types
+- **Admin panel** — configure branding, upload limits, storage quota, allowed file types, and manage users (ban/unban, delete, quota overrides)
 
 ## Self-hosting
 

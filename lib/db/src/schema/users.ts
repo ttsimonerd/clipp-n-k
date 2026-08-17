@@ -10,6 +10,13 @@ export const usersTable = pgTable("users", {
   usedStorageBytes: bigint("used_storage_bytes", { mode: "number" })
     .notNull()
     .default(0),
+  // Discord role IDs the user currently has in the configured guild.
+  // Synced via the Discord bot on login and on demand (POST /auth/roles/sync).
+  roles: text("roles").array().notNull().default([]),
+  // Banned users can't use the app and their public clips are hidden.
+  banned: boolean("banned").notNull().default(false),
+  // Admin-set per-user storage quota override (null = use role/site default).
+  quotaOverrideBytes: bigint("quota_override_bytes", { mode: "number" }),
   // GitHub account linked for star-bonus verification (not a login method).
   githubId: text("github_id").unique(),
   githubUsername: text("github_username"),

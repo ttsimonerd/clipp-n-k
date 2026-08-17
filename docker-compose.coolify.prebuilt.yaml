@@ -74,6 +74,9 @@ services:
       # Comma-separated Discord user IDs with admin access (REQUIRED)
       ADMIN_DISCORD_IDS: ${ADMIN_DISCORD_IDS}
 
+      # Discord bot token — optional; enables role sync + "share to Discord".
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+
       # Storage — local disk by default; switch to s3 for durable external storage
       STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
       STORAGE_LOCAL_DIR: /app/data/clips
@@ -92,6 +95,12 @@ services:
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-https://${SERVICE_FQDN_WEB}/api/auth/github/callback}
+
+      # Optional tuning (see .env.example)
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      PROCESSING_CONCURRENCY: ${PROCESSING_CONCURRENCY:-}
+      FFMPEG_TIMEOUT_MS: ${FFMPEG_TIMEOUT_MS:-}
+      FFMPEG_THUMBNAIL_TIMEOUT_MS: ${FFMPEG_THUMBNAIL_TIMEOUT_MS:-}
 
     volumes:
       - /srv/storage/clipp/clips:/app/data/clips

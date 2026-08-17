@@ -9,13 +9,38 @@ import {
   fetchDiscordUser,
   discordAvatarUrl,
   userIsInGuild,
+  fetchMemberRoles,
 } from "../lib/discord";
 import { getSiteSettings } from "../lib/site-settings";
-import { isAdminDiscordId } from "../middlewares/auth";
-import { effectiveQuotaBytes } from "../lib/quota";
+import { requireAuth, isAdminDiscordId } from "../middlewares/auth";
+import { resolveUserLimits } from "../lib/limits";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+/**
+ * Best-effort Discord role sync. Never throws: role sync is an enhancement
+ * (per-role limits), so a bot outage must not block login or the endpoint.
+ * Returns the role IDs that were stored (or [] when unavailable).
+ */
+async function syncUserRoles(
+  userId: number,
+  discordUserId: string,
+  guildId: string | null,
+): Promise<string[]> {
+  if (!guildId) return [];
+  try {
+    const roles = await fetchMemberRoles(guildId, discordUserId);
+    await db
+      .update(usersTable)
+      .set({ roles })
+      .where(eq(usersTable.id, userId));
+    return roles;
+  } catch (err) {
+    logger.warn({ err, userId }, "Discord role sync failed — per-role limits unavailable");
+    return [];
+  }
+}
 
 router.get("/auth/discord/login", (req, res): void => {
   const state = randomBytes(16).toString("hex");
@@ -93,8 +118,20 @@ router.get("/auth/discord/callback", async (req, res): Promise<void> => {
       userId = created!.id;
     }
 
-    req.session.userId = userId;
-    res.redirect("/");
+    // Sync Discord roles (best-effort) so per-role limits apply immediately.
+    await syncUserRoles(userId, discordUser.id, settings.discordGuildId);
+
+    // Regenerate the session ID on login so a pre-auth session (created when
+    // the OAuth state was stored) can't be fixed by an attacker who knows it.
+    req.session.regenerate((regErr) => {
+      if (regErr) {
+        logger.error({ err: regErr }, "Failed to regenerate session after login");
+        res.redirect("/?authError=session_error");
+        return;
+      }
+      req.session.userId = userId;
+      res.redirect("/");
+    });
   } catch (err) {
     logger.error({ err }, "Discord OAuth callback failed");
     res.redirect("/?authError=oauth_failed");
@@ -107,9 +144,11 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     return;
   }
   const user = req.currentUser;
-  // Quota is computed dynamically from admin-configurable site settings,
-  // not stored per-user, so admin changes apply immediately.
+  // Limits are computed dynamically from admin-configurable site settings,
+  // role config, and the per-user override — not stored per-user — so admin
+  // changes apply immediately.
   const settings = await getSiteSettings();
+  const limits = await resolveUserLimits(user, settings);
   const data = GetMeResponse.parse({
     id: user.id,
     discordId: user.discordId,
@@ -117,11 +156,47 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     avatarUrl: user.avatarUrl,
     isAdmin: isAdminDiscordId(user.discordId),
     usedStorageBytes: user.usedStorageBytes,
-    quotaStorageBytes: effectiveQuotaBytes(user, settings),
+    quotaStorageBytes: limits.quotaBytes,
+    maxUploadBytes: limits.uploadBytes,
+    roles: user.roles ?? [],
+    banned: user.banned,
     githubUsername: user.githubUsername ?? null,
     githubStarBonusGranted: user.githubStarBonusGranted,
   });
   res.json(data);
+});
+
+/**
+ * On-demand Discord role re-sync. Lets a user refresh their roles (and thus
+ * their per-role limits) without re-logging in. Requires auth.
+ */
+router.post("/auth/roles/sync", requireAuth, async (req, res): Promise<void> => {
+  const user = req.currentUser!;
+  const settings = await getSiteSettings();
+  const roles = await syncUserRoles(
+    user.id,
+    user.discordId,
+    settings.discordGuildId,
+  );
+
+  // Return the full Me shape so the client can update its cache in one shot.
+  const limits = await resolveUserLimits({ ...user, roles }, settings);
+  res.json(
+    GetMeResponse.parse({
+      id: user.id,
+      discordId: user.discordId,
+      username: user.username,
+      avatarUrl: user.avatarUrl,
+      isAdmin: isAdminDiscordId(user.discordId),
+      usedStorageBytes: user.usedStorageBytes,
+      quotaStorageBytes: limits.quotaBytes,
+      maxUploadBytes: limits.uploadBytes,
+      roles,
+      banned: user.banned,
+      githubUsername: user.githubUsername ?? null,
+      githubStarBonusGranted: user.githubStarBonusGranted,
+    }),
+  );
 });
 
 router.post("/auth/logout", (req, res): void => {

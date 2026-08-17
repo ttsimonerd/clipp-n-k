@@ -69,17 +69,26 @@ export class S3Driver implements StorageDriver {
     const response = await this.client.send(
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
     );
-    const tmpPath = path.join(os.tmpdir(), `clippnk-${Date.now()}-${path.basename(key)}`);
+    const tmpPath = path.join(
+      os.tmpdir(),
+      `clippnk-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${path.basename(key)}`,
+    );
     const body = response.Body;
     if (!body) {
       throw new Error(`S3 object has no body: ${key}`);
     }
-    const chunks: Buffer[] = [];
-    // @ts-expect-error -- Body is a Node Readable in the node runtime
-    for await (const chunk of body) {
-      chunks.push(Buffer.from(chunk));
+    try {
+      const chunks: Buffer[] = [];
+      // @ts-expect-error -- Body is a Node Readable in the node runtime
+      for await (const chunk of body) {
+        chunks.push(Buffer.from(chunk));
+      }
+      await fs.writeFile(tmpPath, Buffer.concat(chunks));
+      return tmpPath;
+    } catch (err) {
+      // Never leak the temp file if the download/stream fails.
+      await fs.rm(tmpPath, { force: true }).catch(() => {});
+      throw err;
     }
-    await fs.writeFile(tmpPath, Buffer.concat(chunks));
-    return tmpPath;
   }
 }

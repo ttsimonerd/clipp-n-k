@@ -28,6 +28,9 @@ export const GetMeResponse = zod.object({
   "isAdmin": zod.boolean(),
   "usedStorageBytes": zod.number(),
   "quotaStorageBytes": zod.number(),
+  "maxUploadBytes": zod.number().describe('Effective per-file upload size limit for this user (role-aware), used by the upload dialog to filter oversized files client-side.'),
+  "roles": zod.array(zod.string()).describe('Discord role IDs this user currently holds in the configured guild.'),
+  "banned": zod.boolean().describe('Whether an admin has banned this account.'),
   "githubUsername": zod.string().nullable().describe('GitHub login of the linked account, null if not connected.'),
   "githubStarBonusGranted": zod.boolean().describe('Whether the +1 GB star bonus has already been permanently granted.')
 })
@@ -37,6 +40,25 @@ export const GetMeResponse = zod.object({
  * @summary Log the current user out
  */
 export const LogoutResponse = zod.void()
+
+
+/**
+ * @summary Re-sync the current user's Discord roles on demand
+ */
+export const SyncRolesResponse = zod.object({
+  "id": zod.number(),
+  "discordId": zod.string(),
+  "username": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "isAdmin": zod.boolean(),
+  "usedStorageBytes": zod.number(),
+  "quotaStorageBytes": zod.number(),
+  "maxUploadBytes": zod.number().describe('Effective per-file upload size limit for this user (role-aware), used by the upload dialog to filter oversized files client-side.'),
+  "roles": zod.array(zod.string()).describe('Discord role IDs this user currently holds in the configured guild.'),
+  "banned": zod.boolean().describe('Whether an admin has banned this account.'),
+  "githubUsername": zod.string().nullable().describe('GitHub login of the linked account, null if not connected.'),
+  "githubStarBonusGranted": zod.boolean().describe('Whether the +1 GB star bonus has already been permanently granted.')
+})
 
 
 /**
@@ -233,6 +255,16 @@ export const TrimClipResponse = zod.object({
 
 
 /**
+ * @summary Post a link to a public clip in the configured Discord share channel
+ */
+export const ShareClipToDiscordParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ShareClipToDiscordResponse = zod.void()
+
+
+/**
  * @summary Get a public clip by share slug
  */
 export const GetPublicClipParams = zod.object({
@@ -252,10 +284,21 @@ export const GetPublicClipResponse = zod.object({
 
 
 /**
+ * @summary Get public site branding settings
+ */
+export const GetPublicSettingsResponse = zod.object({
+  "brandingTitle": zod.string(),
+  "brandingLogoUrl": zod.string().nullable(),
+  "brandingPrimaryColor": zod.string()
+})
+
+
+/**
  * @summary Get site settings (admin only)
  */
 export const GetAdminSettingsResponse = zod.object({
   "discordGuildId": zod.string().nullable(),
+  "discordShareChannelId": zod.string().nullable().describe('Discord channel ID where \"Share to Discord\" posts are sent, null if disabled.'),
   "brandingTitle": zod.string(),
   "brandingLogoUrl": zod.string().nullable(),
   "brandingPrimaryColor": zod.string(),
@@ -281,6 +324,7 @@ export const GetAdminSettingsResponse = zod.object({
 
 export const UpdateAdminSettingsBody = zod.object({
   "discordGuildId": zod.string().nullish(),
+  "discordShareChannelId": zod.string().nullish(),
   "brandingTitle": zod.string().min(1).optional(),
   "brandingLogoUrl": zod.string().nullish(),
   "brandingPrimaryColor": zod.string().optional(),
@@ -293,6 +337,7 @@ export const UpdateAdminSettingsBody = zod.object({
 
 export const UpdateAdminSettingsResponse = zod.object({
   "discordGuildId": zod.string().nullable(),
+  "discordShareChannelId": zod.string().nullable().describe('Discord channel ID where \"Share to Discord\" posts are sent, null if disabled.'),
   "brandingTitle": zod.string(),
   "brandingLogoUrl": zod.string().nullable(),
   "brandingPrimaryColor": zod.string(),
@@ -305,5 +350,109 @@ export const UpdateAdminSettingsResponse = zod.object({
   "discordEnabled": zod.boolean().describe('True when DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI are all set in the server environment (i.e. Discord OAuth login is functional).'),
   "discordBotEnabled": zod.boolean().describe('True when DISCORD_BOT_TOKEN is set in the server environment (i.e. guild membership verification is functional).')
 })
+
+
+/**
+ * @summary List all users with usage and status (admin only)
+ */
+export const ListAdminUsersResponseItem = zod.object({
+  "id": zod.number(),
+  "discordId": zod.string(),
+  "username": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "usedStorageBytes": zod.number(),
+  "quotaStorageBytes": zod.number(),
+  "quotaOverrideBytes": zod.number().nullable().describe('Admin-set storage quota override, null when role\/site defaults apply.'),
+  "roles": zod.array(zod.string()),
+  "banned": zod.boolean(),
+  "isAdmin": zod.boolean(),
+  "clipCount": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+export const ListAdminUsersResponse = zod.array(ListAdminUsersResponseItem)
+
+
+/**
+ * @summary Ban/unban a user or set their storage quota override (admin only)
+ */
+export const UpdateAdminUserParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateAdminUserBody = zod.object({
+  "banned": zod.boolean().optional(),
+  "quotaOverrideBytes": zod.number().nullish()
+})
+
+export const UpdateAdminUserResponse = zod.object({
+  "id": zod.number(),
+  "discordId": zod.string(),
+  "username": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "usedStorageBytes": zod.number(),
+  "quotaStorageBytes": zod.number(),
+  "quotaOverrideBytes": zod.number().nullable().describe('Admin-set storage quota override, null when role\/site defaults apply.'),
+  "roles": zod.array(zod.string()),
+  "banned": zod.boolean(),
+  "isAdmin": zod.boolean(),
+  "clipCount": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a user and all of their clips (admin only)
+ */
+export const DeleteAdminUserParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteAdminUserResponse = zod.void()
+
+
+/**
+ * @summary Fetch the roles of the configured Discord guild (admin only)
+ */
+export const ListDiscordGuildRolesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "position": zod.number()
+})
+export const ListDiscordGuildRolesResponse = zod.array(ListDiscordGuildRolesResponseItem)
+
+
+/**
+ * @summary List configured per-role upload/storage limits (admin only)
+ */
+export const ListDiscordRoleLimitsResponseItem = zod.object({
+  "roleId": zod.string(),
+  "roleName": zod.string(),
+  "priority": zod.number().describe('Higher wins when a user holds multiple configured roles.'),
+  "maxUploadBytes": zod.number().nullable().describe('Per-file upload limit; null inherits the site default.'),
+  "maxUserStorageBytes": zod.number().nullable().describe('Storage quota; null inherits the site default.')
+})
+export const ListDiscordRoleLimitsResponse = zod.array(ListDiscordRoleLimitsResponseItem)
+
+
+/**
+ * @summary Replace the per-role upload/storage limit configuration (admin only)
+ */
+export const UpdateDiscordRoleLimitsBodyItem = zod.object({
+  "roleId": zod.string(),
+  "roleName": zod.string(),
+  "priority": zod.number().describe('Higher wins when a user holds multiple configured roles.'),
+  "maxUploadBytes": zod.number().nullable().describe('Per-file upload limit; null inherits the site default.'),
+  "maxUserStorageBytes": zod.number().nullable().describe('Storage quota; null inherits the site default.')
+})
+export const UpdateDiscordRoleLimitsBody = zod.array(UpdateDiscordRoleLimitsBodyItem)
+
+export const UpdateDiscordRoleLimitsResponseItem = zod.object({
+  "roleId": zod.string(),
+  "roleName": zod.string(),
+  "priority": zod.number().describe('Higher wins when a user holds multiple configured roles.'),
+  "maxUploadBytes": zod.number().nullable().describe('Per-file upload limit; null inherits the site default.'),
+  "maxUserStorageBytes": zod.number().nullable().describe('Storage quota; null inherits the site default.')
+})
+export const UpdateDiscordRoleLimitsResponse = zod.array(UpdateDiscordRoleLimitsResponseItem)
 
 

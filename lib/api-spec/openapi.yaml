@@ -61,6 +61,25 @@ paths:
         "204":
           description: Logged out
 
+  /auth/roles/sync:
+    post:
+      operationId: syncRoles
+      tags: [auth]
+      summary: Re-sync the current user's Discord roles on demand
+      responses:
+        "200":
+          description: Updated current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          description: Not logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /auth/github/check-star:
     post:
       operationId: githubCheckStar
@@ -251,6 +270,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /clips/{id}/share-discord:
+    post:
+      operationId: shareClipToDiscord
+      tags: [clips]
+      summary: Post a link to a public clip in the configured Discord share channel
+      parameters:
+        - $ref: "#/components/parameters/ClipId"
+      responses:
+        "204":
+          description: Message posted to Discord
+        "400":
+          description: Clip not ready/not public, or sharing not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Discord API error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /public/clips/{slug}:
     get:
       operationId: getPublicClip
@@ -275,6 +323,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /public/settings:
+    get:
+      operationId: getPublicSettings
+      tags: [public]
+      summary: Get public site branding settings
+      responses:
+        "200":
+          description: Public branding settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicSiteSettings"
 
   /admin/settings:
     get:
@@ -318,9 +379,135 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      summary: List all users with usage and status (admin only)
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{id}:
+    patch:
+      operationId: updateAdminUser
+      tags: [admin]
+      summary: Ban/unban a user or set their storage quota override (admin only)
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUserUpdate"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAdminUser
+      tags: [admin]
+      summary: Delete a user and all of their clips (admin only)
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: User deleted
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/discord/guild-roles:
+    get:
+      operationId: listDiscordGuildRoles
+      tags: [admin]
+      summary: Fetch the roles of the configured Discord guild (admin only)
+      responses:
+        "200":
+          description: Guild roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiscordGuildRole"
+        "400":
+          description: No guild configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/discord/role-limits:
+    get:
+      operationId: listDiscordRoleLimits
+      tags: [admin]
+      summary: List configured per-role upload/storage limits (admin only)
+      responses:
+        "200":
+          description: Role limit configuration
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiscordRoleLimit"
+    put:
+      operationId: updateDiscordRoleLimits
+      tags: [admin]
+      summary: Replace the per-role upload/storage limit configuration (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/DiscordRoleLimit"
+      responses:
+        "200":
+          description: Saved role limit configuration
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiscordRoleLimit"
+
 components:
   parameters:
     ClipId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    UserId:
       name: id
       in: path
       required: true
@@ -353,6 +540,9 @@ components:
           isAdmin,
           usedStorageBytes,
           quotaStorageBytes,
+          maxUploadBytes,
+          roles,
+          banned,
           githubUsername,
           githubStarBonusGranted,
         ]
@@ -364,6 +554,18 @@ components:
         isAdmin: { type: boolean }
         usedStorageBytes: { type: integer }
         quotaStorageBytes: { type: integer }
+        maxUploadBytes:
+          type: integer
+          description: >-
+            Effective per-file upload size limit for this user (role-aware),
+            used by the upload dialog to filter oversized files client-side.
+        roles:
+          type: array
+          items: { type: string }
+          description: Discord role IDs this user currently holds in the configured guild.
+        banned:
+          type: boolean
+          description: Whether an admin has banned this account.
         githubUsername:
           type: ["string", "null"]
           description: GitHub login of the linked account, null if not connected.
@@ -488,11 +690,20 @@ components:
         durationSeconds: { type: ["number", "null"] }
         ownerUsername: { type: string }
 
+    PublicSiteSettings:
+      type: object
+      required: [brandingTitle, brandingLogoUrl, brandingPrimaryColor]
+      properties:
+        brandingTitle: { type: string }
+        brandingLogoUrl: { type: ["string", "null"] }
+        brandingPrimaryColor: { type: string }
+
     SiteSettings:
       type: object
       required:
         [
           discordGuildId,
+          discordShareChannelId,
           brandingTitle,
           brandingLogoUrl,
           brandingPrimaryColor,
@@ -507,6 +718,9 @@ components:
         ]
       properties:
         discordGuildId: { type: ["string", "null"] }
+        discordShareChannelId:
+          type: ["string", "null"]
+          description: Discord channel ID where "Share to Discord" posts are sent, null if disabled.
         brandingTitle: { type: string }
         brandingLogoUrl: { type: ["string", "null"] }
         brandingPrimaryColor: { type: string }
@@ -537,6 +751,7 @@ components:
       type: object
       properties:
         discordGuildId: { type: ["string", "null"] }
+        discordShareChannelId: { type: ["string", "null"] }
         brandingTitle: { type: string, minLength: 1 }
         brandingLogoUrl: { type: ["string", "null"] }
         brandingPrimaryColor: { type: string }
@@ -547,3 +762,68 @@ components:
           type: array
           items: { type: string }
         defaultVisibility: { $ref: "#/components/schemas/ClipVisibility" }
+
+    AdminUser:
+      type: object
+      required:
+        [
+          id,
+          discordId,
+          username,
+          avatarUrl,
+          usedStorageBytes,
+          quotaStorageBytes,
+          quotaOverrideBytes,
+          roles,
+          banned,
+          isAdmin,
+          clipCount,
+          createdAt,
+        ]
+      properties:
+        id: { type: integer }
+        discordId: { type: string }
+        username: { type: string }
+        avatarUrl: { type: ["string", "null"] }
+        usedStorageBytes: { type: integer }
+        quotaStorageBytes: { type: integer }
+        quotaOverrideBytes:
+          type: ["integer", "null"]
+          description: Admin-set storage quota override, null when role/site defaults apply.
+        roles:
+          type: array
+          items: { type: string }
+        banned: { type: boolean }
+        isAdmin: { type: boolean }
+        clipCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    AdminUserUpdate:
+      type: object
+      properties:
+        banned: { type: boolean }
+        quotaOverrideBytes: { type: ["integer", "null"] }
+
+    DiscordGuildRole:
+      type: object
+      required: [id, name, position]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        position: { type: integer }
+
+    DiscordRoleLimit:
+      type: object
+      required: [roleId, roleName, priority, maxUploadBytes, maxUserStorageBytes]
+      properties:
+        roleId: { type: string }
+        roleName: { type: string }
+        priority:
+          type: integer
+          description: Higher wins when a user holds multiple configured roles.
+        maxUploadBytes:
+          type: ["integer", "null"]
+          description: Per-file upload limit; null inherits the site default.
+        maxUserStorageBytes:
+          type: ["integer", "null"]
+          description: Storage quota; null inherits the site default.

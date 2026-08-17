@@ -174,3 +174,112 @@ export async function userIsInGuild(
   const guilds = (await response.json()) as DiscordGuild[];
   return guilds.some((guild) => guild.id === guildId);
 }
+
+// ── Bot-token operations (role sync + share-to-Discord) ──────────────────────
+
+/**
+ * Returns the configured bot token, or null when it is not set.
+ *
+ * The bot token is OPTIONAL: without it, role sync and "share to Discord"
+ * are simply unavailable (the admin page already reports this), while
+ * Discord OAuth login and guild-membership checks keep working. This is why
+ * we return null rather than throwing like the OAuth getEnv() helper does.
+ */
+export function getDiscordBotToken(): string | null {
+  return process.env.DISCORD_BOT_TOKEN?.trim() || null;
+}
+
+interface DiscordGuildRole {
+  id: string;
+  name: string;
+  position: number;
+}
+
+/**
+ * Lists every role in a guild. Requires a bot token with the guild present.
+ * Used by the admin UI to map Discord roles to per-role upload/storage limits.
+ */
+export async function fetchGuildRoles(guildId: string): Promise<DiscordGuildRole[]> {
+  const botToken = getDiscordBotToken();
+  if (!botToken) {
+    throw new Error("DISCORD_BOT_TOKEN must be set to fetch guild roles");
+  }
+  const response = await fetch(`${DISCORD_API}/guilds/${guildId}/roles`, {
+    headers: { Authorization: `Bot ${botToken}` },
+  });
+  if (!response.ok) {
+    logger.error({ status: response.status }, "Failed to fetch Discord guild roles");
+    throw new Error(
+      response.status === 404
+        ? "Guild not found or the bot is not in it"
+        : "Failed to fetch Discord guild roles",
+    );
+  }
+  const roles = (await response.json()) as DiscordGuildRole[];
+  // Discord returns the @everyone role first; the rest are already ordered by
+  // descending position (highest at the top). Keep them as-is and let the
+  // admin assign priorities explicitly.
+  return roles;
+}
+
+/**
+ * Fetches the role IDs a specific user has in a guild.
+ *
+ * Returns [] for a member with only the implicit @everyone role, and throws
+ * (as 404) for a user who is not in the guild. Requires a bot token.
+ */
+export async function fetchMemberRoles(
+  guildId: string,
+  discordUserId: string,
+): Promise<string[]> {
+  const botToken = getDiscordBotToken();
+  if (!botToken) {
+    // No bot token → we can't resolve roles. Return [] (no role-based limits
+    // apply) instead of throwing, so login still works without a bot.
+    return [];
+  }
+  const response = await fetch(
+    `${DISCORD_API}/guilds/${guildId}/members/${discordUserId}`,
+    { headers: { Authorization: `Bot ${botToken}` } },
+  );
+  if (!response.ok) {
+    logger.error(
+      { status: response.status, guildId, discordUserId },
+      "Failed to fetch Discord member roles",
+    );
+    throw new Error("Failed to fetch Discord member roles");
+  }
+  const member = (await response.json()) as { roles?: string[] };
+  return member.roles ?? [];
+}
+
+/**
+ * Posts a message to a guild channel as the bot. Used by the "share to
+ * Discord" feature. Throws on failure so the caller can surface an error.
+ */
+export async function postChannelMessage(
+  channelId: string,
+  content: string,
+): Promise<void> {
+  const botToken = getDiscordBotToken();
+  if (!botToken) {
+    throw new Error("DISCORD_BOT_TOKEN must be set to post to Discord");
+  }
+  const response = await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bot ${botToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ content }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    logger.error({ status: response.status, text }, "Failed to post message to Discord channel");
+    throw new Error(
+      response.status === 403
+        ? "The bot lacks permission to post in that channel"
+        : "Failed to post message to Discord channel",
+    );
+  }
+}

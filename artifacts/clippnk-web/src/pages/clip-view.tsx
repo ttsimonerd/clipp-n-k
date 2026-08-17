@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { 
-  useGetClip, getGetClipQueryKey, useUpdateClip, useDeleteClip, useTrimClip
+  useGetClip, getGetClipQueryKey, useUpdateClip, useDeleteClip, useTrimClip, useShareClipToDiscord
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatBytes, formatDate, formatDuration } from "@/lib/format";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { 
-  Loader2, ArrowLeft, Trash2, Scissors, Save, Globe, Lock, AlertCircle, Share2, Play
+  Loader2, ArrowLeft, Trash2, Scissors, Save, Globe, Lock, AlertCircle, Share2, Play, MessageCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -35,6 +35,7 @@ export default function ClipView() {
   const updateClip = useUpdateClip();
   const deleteClip = useDeleteClip();
   const trimClip = useTrimClip();
+  const shareToDiscord = useShareClipToDiscord();
 
   const videoRef = useRef<HTMLVideoElement>(null);
   
@@ -145,6 +146,18 @@ export default function ClipView() {
     toast({ title: "Link copied to clipboard!" });
   };
 
+  const handleShareToDiscord = () => {
+    shareToDiscord.mutate({ id }, {
+      onSuccess: () => {
+        toast({ title: "Shared to Discord!" });
+      },
+      onError: (err) => {
+        const msg = err instanceof Error ? err.message : "Failed to share to Discord";
+        toast({ title: "Couldn't share to Discord", description: msg, variant: "destructive" });
+      },
+    });
+  };
+
   const isProcessing = clip.status === 'processing';
   const isFailed = clip.status === 'failed';
   
@@ -225,6 +238,17 @@ export default function ClipView() {
         )}
       </div>
 
+      {/* A trim/crop that failed restores the previous clip but records why. */}
+      {clip.status === 'ready' && clip.failureReason && (
+        <div className="flex items-start gap-3 text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold">Last trim failed</p>
+            <p className="text-sm opacity-90 mt-1">The previous trim/crop couldn't be applied, so your original clip is unchanged. {clip.failureReason}</p>
+          </div>
+        </div>
+      )}
+
       {/* Metadata & Actions */}
       <div className="flex flex-col lg:flex-row gap-10">
         <div className="flex-1 space-y-6">
@@ -280,9 +304,26 @@ export default function ClipView() {
             size="lg" 
             className="w-full text-lg font-bold h-14 shadow-xl shadow-primary/20 hover:-translate-y-1 transition-transform"
             onClick={handleCopyLink}
+            disabled={clip.visibility !== 'public'}
+            title={clip.visibility !== 'public' ? 'Make this clip public to share it' : undefined}
           >
             <Share2 className="w-6 h-6 mr-3" />
             Copy Share Link
+          </Button>
+          {clip.visibility !== 'public' && (
+            <p className="text-xs text-muted-foreground text-center -mt-2">Make this clip public to share it with a link.</p>
+          )}
+
+          <Button
+            size="lg"
+            variant="outline"
+            className="w-full text-lg font-bold h-14 hover:-translate-y-1 transition-transform"
+            onClick={handleShareToDiscord}
+            disabled={clip.visibility !== 'public' || isProcessing || shareToDiscord.isPending}
+            title={clip.visibility !== 'public' ? 'Make this clip public to share it to Discord' : undefined}
+          >
+            {shareToDiscord.isPending ? <Loader2 className="w-6 h-6 animate-spin mr-3" /> : <MessageCircle className="w-6 h-6 mr-3" />}
+            Share to Discord
           </Button>
 
           <div className="grid grid-cols-2 gap-4">

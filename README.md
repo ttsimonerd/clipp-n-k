@@ -47,6 +47,9 @@ branding, limits and infrastructure.
   🎥 Upload & Share             Upload clips and share them using simple
                                 links.
 
+  📤 Batch Upload               Upload multiple clips at once with
+                                per-file progress and retry for failures.
+
   📦 Smart Compression          Reduce file sizes by **up to 80%**. A **1
                                 GB** upload can often become **\~200 MB**
                                 while preserving quality.
@@ -57,10 +60,19 @@ branding, limits and infrastructure.
   🎮 Built Around Discord       Authenticate with Discord and easily
                                 share clips within your communities.
 
+  🛡️ Discord Role Sync          Sync Discord roles on login and enforce
+                                per-role upload/storage limits.
+
+  🤖 Share to Discord           Post clip links straight into a Discord
+                                channel with one click.
+
   🌎 Official Hosted Instance   Free to use with uploads up to **1 GB**.
 
   🏠 Self-Hosting               Deploy with Docker and configure storage,
                                 branding, upload limits and more.
+
+  👥 User Management            Admins can view usage, ban/unban users,
+                                delete accounts and set quota overrides.
   -----------------------------------------------------------------------
 
 # 🛣️ Roadmap
@@ -74,14 +86,12 @@ branding, limits and infrastructure.
 -   ✅ Official Hosted Instance
 -   ✅ Self-Hosting
 -   ✅ Local & S3 Storage
-
-## Planned
-
--   ⏳ Discord Role Synchronization
--   ⏳ Upload limits per Discord role
--   ⏳ Discord Bot
--   ⏳ User management
--   ⏳ Additional admin tools
+-   ✅ Batch Upload
+-   ✅ Discord Role Synchronization
+-   ✅ Upload Limits per Discord Role
+-   ✅ Discord Bot (role sync + share to Discord)
+-   ✅ User Management
+-   ✅ Additional Admin Tools
 
 ------------------------------------------------------------------------
 
